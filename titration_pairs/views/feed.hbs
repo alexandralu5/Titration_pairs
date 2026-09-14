@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Лента опытов</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="mobile-body">
+  <div class="mobile-container feed-screen">
+
+    <header class="mobile-header overlay-header">
+      <h2>🧪 Labster Feed ({{currentIndex}}/{{totalCount}})</h2>
+    </header>
+
+    <div class="feed-media-wrapper">
+      {{#if item.videoUrl}}
+        <video src="{{item.videoUrl}}" autoplay loop muted playsinline class="feed-media"></video>
+      {{else}}
+        <img src="{{item.imageUrl}}" alt="{{item.title}}" class="feed-media">
+      {{/if}}
+
+      <div class="feed-overlay">
+        <h3>{{item.title}}</h3>
+
+        <p class="desc-text" id="desc-text" style="display: none;">{{item.description}}</p>
+        <button class="btn-more-desc" type="button" onclick="
+          const el = document.getElementById('desc-text');
+          if (el.style.display === 'none') {
+            el.style.display = 'block';
+            this.innerText = 'Скрыть';
+          } else {
+            el.style.display = 'none';
+            this.innerText = 'Ещё';
+          }
+        ">Ещё</button>
+
+        <div class="stats-row">
+          <span>🧪 pH: {{item.ph}}</span>
+          <span>💧 {{item.concentration}} М</span>
+        </div>
+
+        <div class="feed-actions">
+          <button class="like-btn-large" type="button">❤️ {{likesCount}}</button>
+          <a href="/feed/{{nextId}}" class="btn-next">Следующий ➔</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Навигация жестко прибита к низу -->
+    <nav class="mobile-nav" style="position: absolute; bottom: 0; width: 100%; z-index: 1000;">
+      <a href="/feed" class="active">Лента</a>
+      <a href="/add">Добавление</a>
+      <a href="/grid">Плитка</a>
+    </nav>
+
+  </div>
+</body>
+</html>

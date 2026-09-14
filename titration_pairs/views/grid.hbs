@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Плитка опытов</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="mobile-body">
+  <div class="mobile-container">
+
+    <header class="mobile-header">
+      <h2>🧪 Labster Grid</h2>
+    </header>
+
+    <div class="filter-box">
+      <label for="concentration">
+        Мин. концентрация: <span id="conc-val">{{filterValue}}</span> М
+      </label>
+      <form action="/grid" method="GET" class="filter-form">
+        <input
+          type="range"
+          id="concentration"
+          name="concentration"
+          min="0"
+          max="0.3"
+          step="0.01"
+          value="{{filterValue}}"
+          oninput="document.getElementById('conc-val').innerText = this.value"
+        >
+        <button type="submit" class="btn-ok">ОК</button>
+      </form>
+    </div>
+
+    <div class="mobile-grid">
+      {{#each titration_pairs}}
+        <a href="/feed/{{this.id}}" style="text-decoration: none; color: inherit; display: block;">
+          <div class="grid-card">
+            <div class="card-media">
+              <img src="{{this.imageUrl}}" alt="{{this.title}}">
+              <span class="ph-tag">pH {{this.ph}}</span>
+            </div>
+            <div class="card-body">
+              <h4>{{this.title}}</h4>
+              <p class="conc-text">Концентрация: {{this.concentration}} М</p>
+              <button class="like-btn" type="button">❤️ {{this.likesCount}}</button>
+            </div>
+          </div>
+        </a>
+      {{/each}}
+    </div>
+
+    <!-- Навигация внизу -->
+    <nav class="mobile-nav">
+      <a href="/feed">Лента</a>
+      <a href="/add">Добавление</a>
+      <a href="/grid" class="active">Плитка</a>
+    </nav>
+
+  </div>
+</body>
+</html>
