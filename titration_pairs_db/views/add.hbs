@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Добавление опыта</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="mobile-body">
+  <div class="mobile-container">
+
+    <header class="mobile-header">
+      <h2>🧪 Новый опыт</h2>
+    </header>
+
+    <form action="/add/publish" method="POST" enctype="multipart/form-data" class="add-card">
+      <input type="hidden" name="id" value="{{#if draft}}{{draft.id}}{{/if}}">
+
+      <input
+        type="file"
+        id="imageInput"
+        name="image"
+        accept="image/*"
+        style="display: none;"
+        onchange="if(this.files && this.files[0]){ document.getElementById('imgPreview').src = URL.createObjectURL(this.files[0]); }"
+      >
+
+      <div class="form-group">
+        <label>Фото</label>
+        <img
+          id="imgPreview"
+          class="media-preview-img"
+          src="{{#if draft.image_url}}{{draft.image_url}}{{else}}/img/default-image.jpg{{/if}}"
+          alt="Фото опыта"
+          onclick="document.getElementById('imageInput').click()"
+          onerror="this.onerror=null; this.src='/img/default-image.jpg';"
+        >
+      </div>
+
+      <input
+        type="file"
+        id="videoInput"
+        name="video"
+        accept="video/*"
+        style="display: none;"
+        onchange="if(this.files && this.files[0]){ document.getElementById('videoPreview').src = URL.createObjectURL(this.files[0]); }"
+      >
+
+      <div class="form-group">
+        <label>Видео</label>
+        <video
+          id="videoPreview"
+          class="media-preview-video"
+          src="{{#if draft.video_url}}{{draft.video_url}}{{else}}/img/default-video.mp4{{/if}}"
+          autoplay
+          loop
+          muted
+          playsinline
+          onclick="document.getElementById('videoInput').click()"
+          onerror="this.onerror=null; this.src='/img/default-video.mp4';"
+        ></video>
+      </div>
+
+      <div class="form-group">
+        <label>Название пары (кислота / щелочь)</label>
+        <input type="text" name="title" value="{{#if draft}}{{draft.title}}{{/if}}" placeholder="Например: HCl + NaOH" required>
+      </div>
+
+      <div class="form-group">
+        <label>Описание</label>
+        <textarea name="description" rows="2" placeholder="Введите описание реакции...">{{#if draft}}{{draft.description}}{{/if}}</textarea>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>pH</label>
+          <input type="number" step="0.1" name="ph" value="{{#if draft}}{{draft.ph}}{{else}}7.0{{/if}}" required>
+        </div>
+        <div class="form-group">
+          <label>Концентрация (М)</label>
+          <input type="number" step="0.01" name="concentration" value="{{#if draft}}{{draft.concentration}}{{else}}0.10{{/if}}" required>
+        </div>
+      </div>
+
+      <button type="submit" class="button_primary">Опубликовать</button>
+    </form>
+
+    <nav class="mobile-nav">
+      <a href="/feed">Лента</a>
+      <a href="/add" class="active">Добавление</a>
+      <a href="/grid">Плитка</a>
+    </nav>
+
+  </div>
+</body>
+</html>
