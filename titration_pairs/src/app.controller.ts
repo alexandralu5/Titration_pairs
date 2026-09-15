@@ -10,15 +10,26 @@ export class AppController {
 
   @Get('grid')
   @Render('grid')
-  getGrid(@Query('concentration') concentration: string) {
-    const pairs: TitrationPair[] = this.appService.getPublished(concentration);
+  async getGrid(
+    @Query('concentration') concentration?: string,
+    @Query('id') id?: string,
+  ) {
+    let pairs: TitrationPair[] = await this.appService.getPublished(concentration);
+
+    // Если передан id, оставляем только опыт с этим id
+    if (id) {
+      pairs = pairs.filter((p) => String(p.id) === String(id));
+    }
+
     const viewData = pairs.map((p: TitrationPair) => ({
       ...p,
-      likesCount: p.likes.length
+      likesCount: p.likes ? p.likes.length : (p.likes|| 0),
     }));
+
     return {
       titration_pairs: viewData,
-      filterValue: concentration || '0'
+      filterValue: concentration || '0',
+      selectedId: id || '',
     };
   }
 
