@@ -17,7 +17,6 @@
       <form class="add-card content-with-nav" onsubmit="event.preventDefault()">
         <div class="status-badge">Статус: <span>{{draft.status}}</span></div>
 
-        <!-- Скрытый инпут для фото -->
         <input
           type="file"
           id="imageInput"
@@ -26,7 +25,6 @@
           onchange="if(this.files && this.files[0]){ document.getElementById('imgPreview').src = URL.createObjectURL(this.files[0]); }"
         >
 
-        <!-- Поле фото с кликом по изображению -->
         <div class="form-group">
           <label>Фото</label>
           {{#if draft.imageUrl}}
@@ -40,7 +38,6 @@
           {{/if}}
         </div>
 
-        <!-- Скрытый инпут для видео -->
         <input
           type="file"
           id="videoInput"
@@ -49,7 +46,6 @@
           onchange="if(this.files && this.files[0]){ document.getElementById('videoPreview').src = URL.createObjectURL(this.files[0]); }"
         >
 
-        <!-- Поле видео с кликом по медиаплееру -->
         <div class="form-group">
           <label>Видео</label>
           {{#if draft.videoUrl}}
@@ -89,7 +85,6 @@
       </form>
     {{/if}}
 
-    <!-- Навигация внизу -->
     <nav class="mobile-nav">
       <a href="/feed">Лента</a>
       <a href="/add" class="active">Добавление</a>
