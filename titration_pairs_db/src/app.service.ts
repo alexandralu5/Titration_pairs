@@ -16,6 +16,8 @@ export interface TitrationPair {
   status: 'draft' | 'published' | 'deleted';
   likesCount: number;
   likes?: string[];
+  shortDescription: string;
+  hasLongDescription: boolean;
 }
 
 @Injectable()
@@ -68,6 +70,9 @@ export class AppService implements OnModuleInit {
     const vid = row.video_url || '/img/default-video.mp4';
     const likesCount = parseInt(row.likes_count || '0', 10);
 
+    const fullDesc = (row.description || '').trim();
+    const shortDesc = fullDesc.length > 80 ? `${fullDesc.slice(0, 80).trimEnd()}…` : fullDesc;
+
     return {
       ...row,
       id: String(row.id),
@@ -82,10 +87,12 @@ export class AppService implements OnModuleInit {
       status: row.status,
       likesCount: likesCount,
       likes: new Array(likesCount).fill('user'),
+      shortDescription: shortDesc,
+      hasLongDescription: fullDesc !== shortDesc,
     };
   }
 
-  // 1. Получение или создание черновика в БД PostgreSQL
+  // 1. Получение черновика из БД PostgreSQL (null, если черновиков нет)
   async getDraft() {
     const res = await this.pool.query(
       `SELECT t.*, COUNT(l.id) as likes_count
@@ -93,6 +100,7 @@ export class AppService implements OnModuleInit {
        LEFT JOIN likes l ON t.id = l.titration_id
        WHERE t.status = 'draft'
        GROUP BY t.id
+       ORDER BY t.id DESC
        LIMIT 1`
     );
 
@@ -100,16 +108,21 @@ export class AppService implements OnModuleInit {
       return this.formatPair(res.rows[0]);
     }
 
-    // Автоматическая коррекция счетчика перед вставкой
-    await this.onModuleInit();
+    return null;
+  }
 
-    const newDraft = await this.pool.query(
+  // 1.1. Создание нового черновика (кнопка "Далее")
+  async createDraft(title: string) {
+    const safeTitle = (title || '').trim() || 'Новый опыт';
+
+    const res = await this.pool.query(
       `INSERT INTO titrations (title, description, status, ph, concentration, creator_id, image_url, video_url)
-       VALUES ('Новый опыт', '', 'draft', 7.0, 0.10, 1, '/img/default-image.jpg', '/img/default-video.mp4')
-       RETURNING *`
+       VALUES ($1, '', 'draft', 7.0, 0.10, 1, '/img/default-image.jpg', '/img/default-video.mp4')
+       RETURNING *`,
+      [safeTitle]
     );
 
-    return this.formatPair(newDraft.rows[0]);
+    return this.formatPair(res.rows[0]);
   }
 
   // 2. Выборка опубликованных записей из БД
@@ -180,25 +193,26 @@ export class AppService implements OnModuleInit {
 
     const ph = body.ph ? parseFloat(body.ph) : 7.0;
     const concentration = body.concentration ? parseFloat(body.concentration) : 0.1;
-    const title = body.title || 'Новый опыт';
+    const title = (body.title || '').trim();
     const description = body.description || '';
 
     if (body.id) {
       const numericId = Number(body.id);
       await this.pool.query(
         `UPDATE titrations
-         SET title = $1, description = $2, ph = $3, concentration = $4, status = 'published', formed_at = NOW(),
+         SET description = $1, ph = $2, concentration = $3, status = 'published', formed_at = NOW(),
+             title = CASE WHEN $4 <> '' THEN $4 ELSE title END,
              image_url = CASE WHEN $5 <> '/img/default-image.jpg' THEN $5 ELSE image_url END,
              video_url = CASE WHEN $6 <> '/img/default-video.mp4' THEN $6 ELSE video_url END
          WHERE id = $7`,
-        [title, description, ph, concentration, imageUrl, videoUrl, numericId]
+        [description, ph, concentration, title, imageUrl, videoUrl, numericId]
       );
     } else {
       await this.onModuleInit();
       await this.pool.query(
         `INSERT INTO titrations (title, description, ph, concentration, status, creator_id, image_url, video_url, formed_at)
          VALUES ($1, $2, $3, $4, 'published', 1, $5, $6, NOW())`,
-        [title, description, ph, concentration, imageUrl, videoUrl]
+        [title || 'Новый опыт', description, ph, concentration, imageUrl, videoUrl]
       );
     }
   }

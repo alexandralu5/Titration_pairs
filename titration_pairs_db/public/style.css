@@ -187,43 +187,36 @@ body.mobile-body {
 .card-action-btn {
   position: absolute;
   bottom: 8px;
-  width: 68px; /* Фиксированная ширина */
-  height: 26px; /* Фиксированная высота */
+  height: 26px;
+  min-width: 68px;
+  padding: 0 8px;
   font-size: 0.72rem;
   font-weight: 600;
-  border-radius: 8px;
+  border-radius: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   box-sizing: border-box;
-  border: none;
   line-height: 1;
-  padding: 0;
 }
 
 /* Левый нижний угол - Удалить */
 .btn-delete-card {
   left: 8px;
-  background: #ffeccc;
-  color: #d9363e;
-  border: 1px solid #fca5a5;
 }
 
 /* Правый нижний угол - Лайк */
 .btn-like-card {
   right: 8px;
-  background: #f3f4f6;
-  color: #374151;
-  border: 1px solid #d1d5db;
+}
+
+/* Удаление и лайк в одном стиле */
+.btn-like-card,
+.btn-delete-card {
   background: #ffe6e6;
   color: #e60000;
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 0.8rem;
-  font-weight: bold;
-  cursor: pointer;
-  align-self: flex-start;
+  border: 1px solid #fecaca;
 }
 
 /* =========================================================================
@@ -273,6 +266,12 @@ body.mobile-body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+
+.add-draft-title {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--bg-dark);
 }
 
 .media-preview-img {
@@ -372,6 +371,12 @@ body.mobile-body {
   font-size: 1.1rem;
 }
 
+.desc-short {
+  margin: 0 0 4px 0;
+  font-size: 0.85rem;
+  color: #ddd;
+}
+
 .desc-text {
   margin: 0 0 4px 0;
   font-size: 0.85rem;
@@ -399,8 +404,9 @@ body.mobile-body {
 
 .feed-actions {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
 }
 
 .like-btn-large {
@@ -414,13 +420,20 @@ body.mobile-body {
 }
 
 .btn-next {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
   background: var(--primary);
-  color: white;
+  color: #fff;
   text-decoration: none;
-  padding: 8px 20px;
-  border-radius: 20px;
-  font-size: 0.9rem;
-  font-weight: bold;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.btn-next svg {
+  display: block;
 }
 
 /* =========================================================================

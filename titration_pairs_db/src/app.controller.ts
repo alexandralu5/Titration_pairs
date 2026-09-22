@@ -10,6 +10,7 @@ import {
   UploadedFiles,
   Res,
   Body,
+  Redirect,
   NotFoundException,
 } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
@@ -37,7 +38,13 @@ export class AppController {
     return { draft };
   }
 
-  @Post(['add/publish', 'add'])
+  @Post(['add', 'add/step1'])
+  @Redirect('/add')
+  async createDraftStep(@Body() body: any) {
+    await this.appService.createDraft(body?.title);
+  }
+
+  @Post('add/publish')
   @UseInterceptors(
     FileFieldsInterceptor([
       { name: 'image', maxCount: 1 },
