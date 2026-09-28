@@ -17,6 +17,7 @@ export interface TitrationPair {
   likesCount: number;
   likes?: string[];
   shortDescription: string;
+  extraDescription: string;
   hasLongDescription: boolean;
 }
 
@@ -71,7 +72,15 @@ export class AppService implements OnModuleInit {
     const likesCount = parseInt(row.likes_count || '0', 10);
 
     const fullDesc = (row.description || '').trim();
-    const shortDesc = fullDesc.length > 80 ? `${fullDesc.slice(0, 80).trimEnd()}…` : fullDesc;
+
+    // Первое предложение — короткое описание, остальная часть раскрывается по кнопке "Ещё"
+    const firstSentenceEnd = fullDesc.search(/[.!?…](?:\s|$)/);
+    let shortDesc = fullDesc;
+    let extraDesc = '';
+    if (firstSentenceEnd !== -1 && firstSentenceEnd < fullDesc.length - 1) {
+      shortDesc = fullDesc.slice(0, firstSentenceEnd + 1);
+      extraDesc = fullDesc.slice(firstSentenceEnd + 1).trim();
+    }
 
     return {
       ...row,
@@ -88,7 +97,8 @@ export class AppService implements OnModuleInit {
       likesCount: likesCount,
       likes: new Array(likesCount).fill('user'),
       shortDescription: shortDesc,
-      hasLongDescription: fullDesc !== shortDesc,
+      extraDescription: extraDesc,
+      hasLongDescription: extraDesc.length > 0,
     };
   }
 
