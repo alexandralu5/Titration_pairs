@@ -1,0 +1,342 @@
+{
+  "info": {
+    "name": "Titration Pairs — REST API (веб-сервис /api)",
+    "description": "Коллекция для скриншотов лабораторной №3. Веб-сервис: список с фильтром, добавление услуги (multipart, файлы в Minio), черновик, публикация, лента (?next=true), лайк, soft-delete, домен пользователя (register/login/logout).\n\nПеременные коллекции:\n  baseUrl   = http://localhost:3000/api\n  serviceId = id созданной услуги (заполняется автоматически из GET /services/draft и GET /services/feed)\n  imagePath, videoPath = пути к файлам для загрузки",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api" },
+    { "key": "serviceId", "value": "18" },
+    {
+      "key": "imagePath",
+      "value": "T:/home/alexandralu/Titration_pairs/titration_pairs_db/public/img/default-image.jpg"
+    },
+    {
+      "key": "videoPath",
+      "value": "T:/home/alexandralu/Titration_pairs/titration_pairs_db/public/img/default-video.mp4"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Список услуг с фильтром",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/api/services?minConcentration=0.1",
+          "host": ["http://localhost:3000"],
+          "path": ["api", "services"],
+          "query": [{ "key": "minConcentration", "value": "0.1" }]
+        },
+        "description": "GET /api/services — только опубликованные записи; фильтрация на бэкенде по минимальной концентрации."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Все записи опубликованы', function () { pm.response.json().forEach(function (s) { pm.expect(s.status).to.eql('published'); }); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Добавить новую услугу (с картинкой и видео)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "title", "value": "Титрование KOH + HCl (Postman)", "type": "text" },
+            { "key": "image", "type": "file", "src": "{{imagePath}}" },
+            { "key": "video", "type": "file", "src": "{{videoPath}}" }
+          ]
+        },
+        "url": {
+          "raw": "http://localhost:3000/api/services",
+          "host": ["http://localhost:3000"],
+          "path": ["api", "services"]
+        },
+        "description": "POST /api/services — создание черновика. Файлы загружаются в Minio латинскими именами, в БД сохраняются имена файлов. Системные поля (id, status, creator, moderator, даты) с клиента не принимаются."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 201', function () { pm.response.to.have.status(201); });",
+              "pm.test('Черновик с Minio-URL', function () {",
+              "  var s = pm.response.json();",
+              "  pm.expect(s.status).to.eql('draft');",
+              "  pm.expect(s.image_url).to.match(/^http:\\/\\/localhost:9000\\/titration\\//);",
+              "  pm.test('id сохранён в переменную сервиса', function () { pm.expect(s.id).is.not.undefined; pm.collectionVariables.set('serviceId', String(s.id)); });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2b. Заменить изображение услуги (MinIO)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [{ "key": "image", "type": "file", "src": "{{imagePath}}" }]
+        },
+        "url": {
+          "raw": "http://localhost:3000/api/services/{{serviceId}}/image",
+          "host": ["http://localhost:3000"],
+          "path": ["api", "services", "{{serviceId}}", "image"]
+        },
+        "description": "POST /api/services/:id/image — замена изображения услуги. Старое изображение удаляется из MinIO, новое сохраняется латинским именем (методичка, раздел MinIO)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 201', function () { pm.response.to.have.status(201); });",
+              "pm.test('Новое изображение с латинским именем в MinIO', function () {",
+              "  pm.expect(pm.response.json().image_url).to.match(/^http:\\/\\/localhost:9000\\/titration\\\\/img_[a-z0-9_]+\\\\.(jpe?g|png|gif|webp)$/);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Получить поля черновика",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/api/services/draft",
+          "host": ["http://localhost:3000"],
+          "path": ["api", "services", "draft"]
+        },
+        "description": "GET /api/services/draft — черновик текущего пользователя (не более 1 записи), id не указывается. При 404 — черновика нет."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+              "var s = pm.response.json();",
+              "pm.expect(s.status).to.eql('draft');",
+              "pm.collectionVariables.set('serviceId', String(s.id));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Опубликовать услугу",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"ph\": 7.0, \"concentration\": 0.12, \"description\": \"Точка эквивалентности при pH 7.0.\" }"
+        },
+        "url": {
+          "raw": "http://localhost:3000/api/services/{{serviceId}}/publish",
+          "host": ["http://localhost:3000"],
+          "path": ["api", "services", "{{serviceId}}", "publish"]
+        },
+        "description": "PUT /api/services/:id/publish — смена статуса draft → published, только у создателя, только из черновика (вернуться в черновик нельзя). Модератор и дата формирования проставляются на бэкенде."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+              "var s = pm.response.json();",
+              "pm.expect(s.status).to.eql('published');",
+              "pm.expect(s.ph).to.eql(7.0);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Получить ленту (без ид)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/api/services/feed",
+          "host": ["http://localhost:3000"],
+          "path": ["api", "services", "feed"]
+        },
+        "description": "GET /api/services/feed — лента всех опубликованных услуг."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Только опубликованные', function () { pm.response.json().forEach(function (s) { pm.expect(s.status).to.eql('published'); }); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Получить ленту по ид (?next=true)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/api/services/feed/{{serviceId}}?next=true",
+          "host": ["http://localhost:3000"],
+          "path": ["api", "services", "feed", "{{serviceId}}"],
+          "query": [{ "key": "next", "value": "true" }]
+        },
+        "description": "GET /api/services/feed/:id?next=true — возвращает следующую за :id запись ленты. Без ?next= возвращается сама запись :id."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Поставить лайк",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"value\": 1 }"
+        },
+        "url": {
+          "raw": "http://localhost:3000/api/services/{{serviceId}}/like",
+          "host": ["http://localhost:3000"],
+          "path": ["api", "services", "{{serviceId}}", "like"]
+        },
+        "description": "POST /api/services/:id/like — value=1 ставит лайк от текущего пользователя, value=0 отменяет."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 201', function () { pm.response.to.have.status(201); });",
+              "var r = pm.response.json();",
+              "pm.expect(r.liked).to.eql(true);",
+              "pm.expect(r.likes_count).to.be.gte(1);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Удалить услугу (soft delete)",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/api/services/{{serviceId}}",
+          "host": ["http://localhost:3000"],
+          "path": ["api", "services", "{{serviceId}}"]
+        },
+        "description": "DELETE /api/services/:id — мягкое удаление: status = 'deleted', запись клиенту больше не возвращается."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+              "pm.expect(pm.response.json().status).to.eql('deleted');",
+              "pm.test('Удалённой записи нет в ленте', function () {",
+              "  pm.sendRequest('http://localhost:3000/api/services/feed', function (e, r) {",
+              "    var ids = r.json().map(function (s) { return String(s.id); });",
+              "    pm.expect(ids).to.not.include(pm.collectionVariables.get('serviceId'));",
+              "  });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Зарегистрировать пользователя",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"username\": \"new_user_1\" }"
+        },
+        "url": {
+          "raw": "http://localhost:3000/api/users/register",
+          "host": ["http://localhost:3000"],
+          "path": ["api", "users", "register"]
+        },
+        "description": "POST /api/users/register — регистрация нового пользователя (домен «Пользователь»)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 201', function () { pm.response.to.have.status(201); });",
+              "pm.expect(pm.response.json().username).to.eql('new_user_1');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Аутентификация (заглушка)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{ \"username\": \"new_user_1\" }" },
+        "url": {
+          "raw": "http://localhost:3000/api/users/login",
+          "host": ["http://localhost:3000"],
+          "path": ["api", "users", "login"]
+        },
+        "description": "POST /api/users/login — транзакция аутентификации (заглушка для лабораторной №4)."
+      }
+    },
+    {
+      "name": "11. Деавторизация (заглушка)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/api/users/logout",
+          "host": ["http://localhost:3000"],
+          "path": ["api", "users", "logout"]
+        },
+        "description": "POST /api/users/logout — транзакция деавторизации (заглушка для лабораторной №4)."
+      }
+    }
+  ]
+}

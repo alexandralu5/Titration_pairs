@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Плитка опытов</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="mobile-body">
+  <div class="mobile-container">
+
+    <header class="mobile-header">
+      <h2 style="margin:0; font-size: 1.2rem;">🧪 Labster Grid</h2>
+    </header>
+
+    <div class="filter-box">
+      <label for="concentration" style="font-size: 0.85rem;">
+        Мин. концентрация: <span id="conc-val">{{filterValue}}</span> М
+      </label>
+      <form action="/grid" method="GET" class="filter-form" style="display:flex; gap:8px; align-items:center; margin-top:4px;">
+        <input
+          type="range"
+          id="concentration"
+          name="concentration"
+          min="0"
+          max="0.3"
+          step="0.01"
+          value="{{filterValue}}"
+          oninput="document.getElementById('conc-val').innerText = this.value"
+          style="flex:1;"
+        >
+        <button type="submit" class="btn-ok" style="padding:4px 12px; font-size:0.8rem; border-radius:6px; border:none; background:#007bff; color:#fff; cursor:pointer;">ОК</button>
+      </form>
+    </div>
+
+    <!-- Область со скроллом для карточек -->
+    <div class="content-scroll-area">
+      <div class="mobile-grid">
+        {{#each data}}
+          <div class="grid-card">
+            <a href="/feed/{{this.id}}" class="card-media-link">
+              <div class="card-media">
+                <img
+                  src="{{this.image_url}}"
+                  alt="{{this.title}}"
+                  onerror="this.onerror=null; this.src='/img/default-image.jpg';"
+                >
+                <span class="ph-tag">pH {{this.ph}}</span>
+              </div>
+              <div class="card-body">
+                <div class="card-title">{{this.title}}</div>
+                <div class="conc-text">{{this.concentration}} М</div>
+              </div>
+            </a>
+
+            <!-- Кнопка удаления (Нижний левый угол) -->
+            <form action="/delete" method="POST" style="margin: 0;">
+              <input type="hidden" name="id" value="{{this.id}}">
+              <button type="submit" class="card-action-btn btn-delete-card" title="Удалить">
+                🗑️
+              </button>
+            </form>
+
+            <!-- Кнопка лайка (Нижний правый угол) -->
+            <button class="card-action-btn btn-like-card" type="button">
+              ❤️ {{this.likesCount}}
+            </button>
+          </div>
+        {{/each}}
+      </div>
+    </div>
+
+    <!-- Навигация -->
+    <nav class="mobile-nav">
+      <a href="/feed">Лента</a>
+      <a href="/add">Добавление</a>
+      <a href="/grid" class="active">Плитка</a>
+    </nav>
+
+  </div>
+</body>
+</html>
