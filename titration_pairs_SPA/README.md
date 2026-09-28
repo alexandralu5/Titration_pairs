@@ -1,1796 +1,357 @@
-# Методические указания по выполнению лабораторной работы №3
+# Titration Pairs
 
-## Тема: Разработка REST API веб-сервиса для интернет-магазина на NestJS
+Веб-приложение, где хранятся пары веществ для титрования (например, HCl + NaOH).
+У каждой пары есть название, описание, pH, концентрация, картинка и видео.
+Картинки и видео лежат в MinIO, остальные данные — в PostgreSQL.
 
-### Оглавление
+Приложение сделано на NestJS. Работает в двух режимах:
 
-1. [Введение](#1-введение)
-2. [Что такое API и REST](#2-что-такое-api-и-rest)
-3. [Описание проекта](#3-описание-проекта)
-4. [Установка проекта и настройка окружения](#4-установка-проекта-и-настройка-окружения)
-5. [Конфигурация TypeORM в app.module.ts](#5-конфигурация-typeorm-в-appmodulets)
-6. [Создание сущностей (Entity)](#6-создание-сущностей-entity)
-7. [Реализация репозитория для работы с БД](#7-реализация-репозитория-для-работы-с-бд)
-8. [DTO. Сервис с бизнес-логикой](#8-dto-сервис-с-бизнес-логикой)
-9. [Контроллер и REST API маршруты](#9-контроллер-и-rest-api-маршруты)
-10. [Модуль ProductsModule](#10-модуль-ProductsModule)
-11. [Валидация и глобальные пайпы](#11-валидация-и-глобальные-пайпы)
-12. [Тестирование GET в Postman](#12-тестирование-GET-в-Postman)
-13. [POST запрос](#13-POST-запрос)
-14. [GET запрос одной услуги и фильтры](#14-GET-запрос-одной-услуги-и-фильтры)
-15. [PUT и DELETE запросы](#15-PUT-и-DELETE-запросы)
-16. [MinIo](#16-MinIo)
-17. [Итоговая структура проекта](#17-итоговая-структура-проекта)
-18. [Полезные ссылки](#18-полезные-ссылки)
+- **SSR** — страницы на Handlebars (`/grid`, `/add`, `/feed`), SQL пишется напрямую через `pg`;
+- **REST API** — методы под `/api/*`, работа с БД через TypeORM.
 
----
-
-## 1. Введение
-
-В этой лабораторной работе мы разработаем **REST API веб-сервис** для управления товарами интернет-магазина. В отличие от предыдущих работ, где мы использовали шаблонизацию для взаимодействия с пользователями, здесь мы сосредоточимся на **программном интерфейсе** для взаимодействия между приложениями.
-
-Мы реализуем полный цикл **CRUD операций**:
-- **Create** — создание нового товара
-- **Read** — получение списка товаров или конкретного товара по ID
-- **Update** — обновление существующего товара
-- **Delete** — мягкое удаление товара
-
-### Архитектурные слои проекта:
-
-```
-┌─────────────────────────────────────────┐
-│           Контроллер (Controller)       │ ← HTTP-запросы, маршрутизация
-│               @Controller()             │
-└─────────────────┬───────────────────────┘
-                  │
-┌─────────────────▼───────────────────────┐
-│            Сервис (Service)             │ ← Бизнес-логика, правила
-│               @Injectable()             │
-└─────────────────┬───────────────────────┘
-                  │
-┌─────────────────▼───────────────────────┐
-│          Репозиторий (Repository)       │ ← Работа с базой данных
-│               @Injectable()             │
-└─────────────────┬───────────────────────┘
-                  │
-┌─────────────────▼───────────────────────┐
-│           Сущность (Entity)             │ ← Модель данных, структура таблицы
-│               @Entity()                 │
-└─────────────────────────────────────────┘
-                  │
-┌─────────────────▼───────────────────────┐
-│          DTO (Data Transfer Object)     │ ← Валидация входных данных
-│               class-validator            │
-└─────────────────────────────────────────┘
-```
-
----
-
-## 2. Что такое API и REST
-
-### 2.1 API (Application Programming Interface)
-**API** — это набор правил и инструментов для взаимодействия программных компонентов. В контексте веб-разработки, API определяет способ, которым клиентские приложения могут взаимодействовать с сервером.
-
-### 2.2 REST (Representational State Transfer)
-**REST** — архитектурный стиль для распределенных систем, основанный на следующих принципах:
-
-1. **Клиент-серверная архитектура** — разделение клиента и сервера
-2. **Отсутствие состояния** — каждый запрос содержит всю необходимую информацию
-3. **Кэширование** — ответы могут быть кэшированы
-4. **Единообразие интерфейса** — стандартные HTTP-методы и форматы данных
-5. **Слоистая система** — система может состоять из нескольких слоев
-
----
-### 2.3 HTTP-методы в REST API:
-
-| Метод   | Описание                     | Пример использования           |
-|---------|------------------------------|--------------------------------|
-| **GET**    | Получение ресурса            | `GET /api/products`            |
-| **POST**   | Создание нового ресурса      | `POST /api/products`           |
-| **PUT**    | Полное обновление ресурса    | `PUT /api/products/1`          |
-| **DELETE** | Удаление ресурса             | `DELETE /api/products/1`       |
-| **PATCH**  | Частичное обновление ресурса | `PATCH /api/products/1`        |
-
----
-
-### 2.4 Форматы данных
-В REST API данные передаются в формате **JSON** (JavaScript Object Notation):
-
-```json
-{
-  "id": 1,
-  "name": "Ноутбук ASUS VivoBook",
-  "price": 54999,
-  "category": "Электроника",
-  "inStock": true
-}
-```
-
----
-
-## 3. Описание проекта
-
-Мы разрабатываем REST API для **интернет-магазина**. Каждый товар имеет следующие характеристики:
-
-### Атрибуты товара:
-- **id** — уникальный идентификатор (автоинкремент)
-- **name** — название товара (строка, ≥3 символов)
-- **description** — описание товара (опционально)
-- **price** — цена товара (число, ≥0)
-- **category** — категория товара (например, "Электроника", "Книги")
-- **inStock** — наличие на складе (булево значение)
-- **stockQuantity** — количество на складе (целое число, ≥0)
-- **isDeleted** — флаг мягкого удаления (скрыто от клиента)
-- **createdAt** — дата создания записи
-- **updatedAt** — дата последнего обновления
-
-### Бизнес-правила:
-1. При `stockQuantity: 0` автоматически устанавливается `inStock: false`
-2. Удаление товара происходит через мягкое удаление (`isDeleted: true`)
-3. Удаленные товары не показываются в общих списках
-4. Нельзя обновлять удаленные товары
-5. Цена товара не может быть отрицательной
-
----
-
-## 4. Установка проекта и настройка окружения
-
-### 4.1 Установка NestJS CLI
+## Запуск
 
 ```bash
-# Установка NestJS CLI глобально
-npm install -g @nestjs/cli
-
-# Проверка установки
-nest --version
-```
----
-
-### 4.2 Создание нового проекта
-
-```bash
-# Создание проекта
-nest new bmstu-lab
-
-# Выбор менеджера пакетов (выберите npm)
-? Which package manager would you ❤️ to use?
-  npm
-  yarn
-  pnpm
-
-# Переход в папку проекта
-cd bmstu-lab
-```
----
-
-### 4.3 Установка необходимых зависимостей
-
-```bash
-# Основные зависимости для REST API
-npm install @nestjs/typeorm typeorm pg @nestjs/config
-npm install class-validator class-transformer
-
-# Разработческие зависимости
-npm install --save-dev @types/node
-```
----
-
-### 4.4 Настройка Docker для PostgreSQL, MinIo
-
-Для выполнения лабораторной работы потребуется развернуть два сервиса:
-
-    PostgreSQL — база данных для хранения структурированной информации
-
-    MinIO — объектное хранилище для загрузки и хранения изображений
-
-Создайте файл docker-compose.yml в корневой директории проекта. Этот файл содержит конфигурацию для одновременного запуска всех необходимых сервисов.
-
-**Важно**: порты на вашем компьютере могут быть заняты другими приложениями. Если при запуске возникают ошибки связанные с портами — измените их в конфигурации.
-
-Пример:
-По умолчанию PostgreSQL использует порт 5432:5432. Если он занят, измените конфигурацию на 5439:5432. В этом случае:
-
-- Внутри контейнера PostgreSQL останется на порту 5432
-
-- На вашем компьютере база будет доступна по порту 5439
-
-Аналогично можно настроить порты для MinIO и других сервисов.
-
-```yaml
-version: '3.8'
-
-services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: bmstu_postgres
-    environment:
-      POSTGRES_USER: bmstu_user
-      POSTGRES_PASSWORD: bmstu_password
-      POSTGRES_DB: bmstu_lab_db
-    ports:
-      - "5439:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-    networks:
-      - bmstu_network
-
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: bmstu_pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@bmstu.ru
-      PGADMIN_DEFAULT_PASSWORD: admin
-    ports:
-      - "5050:80"
-    depends_on:
-      - postgres
-    networks:
-      - bmstu_network
-
-  minio:
-    image: minio/minio:latest
-    container_name: bmstu_minio
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - "9090:9000"  
-      - "9091:9001"  
-    volumes:
-      - minio_data:/data
-    networks:
-      - bmstu_network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
-
-volumes:
-  postgres_data:
-  minio_data:
-
-networks:
-  bmstu_network:
-    driver: bridge
+npm install
+docker compose up -d                      # PostgreSQL и MinIO
+npx ts-node scripts/migrate.ts            # создать таблицы и залить тестовые данные
+npm run start:dev                          # http://localhost:3000
 ```
 
-Заполним БД любым удобным для вас способом, например с помощью PgAdmin:
-
-```sql
-CREATE TABLE IF NOT EXISTS products (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    price DECIMAL(10, 2) NOT NULL,
-    category VARCHAR(100),
-    in_stock BOOLEAN DEFAULT true,
-    stock_quantity INTEGER DEFAULT 0,
-    is_deleted BOOLEAN DEFAULT false,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-INSERT INTO products (name, description, price, category, stock_quantity) VALUES
-    ('Ноутбук ASUS VivoBook', '15.6 дюймов, Intel Core i5, 8GB RAM, 512GB SSD', 54999, 'Электроника', 10),
-    ('Смартфон Xiaomi Redmi Note', '6.7" AMOLED, 128GB, 5000mAh', 19999, 'Электроника', 15),
-    ('Книга "Чистый код"', 'Роберт Мартин, руководство для разработчиков', 1499, 'Книги', 20),
-    ('Кофемашина De''Longhi', 'Автоматическая кофемашина с капучинатором', 24999, 'Бытовая техника', 5),
-    ('Наушники Sony WH-1000XM4', 'Беспроводные, шумоподавление', 24999, 'Электроника', 8);
-```
-
----
-
-
-### 4.5 Конфигурационный файл `.env`
-
-Использование .env файла для хранения конфигурации и секретов — это хорошая практика любого современного проекта, так как она отделяет код от настроек, повышает безопасность и упрощает развертывание в разных окружениях. Создайте файл `.env` в корне проекта и запишите туда данные из `.yaml`:
+Файл `.env`:
 
 ```env
 DB_HOST=localhost
-DB_PORT=5439
-DB_USERNAME=bmstu_user
-DB_PASSWORD=bmstu_password
-DB_DATABASE=bmstu_lab_db
-DB_SYNCHRONIZE=true
-DB_LOGGING=true
-
+DB_PORT=5432
+DB_USERNAME=admin
+DB_PASSWORD=password
+DB_DATABASE=titration_db
+DB_SYNCHRONIZE=false
+DB_LOGGING=false
 MINIO_ENDPOINT=localhost
-MINIO_PORT=9090
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
-MINIO_BUCKET=bmstu-bucket
-MINIO_USE_SSL=false
-```
----
-
-### 5 Конфигурация TypeORM в `app.module.ts`
-
-**AppModule** — это главный модуль приложения, где собираются и настраиваются все компоненты (база данных, конфигурация, бизнес-логика). Он подключает TypeORM к PostgreSQL, используя параметры из `.env`, чтобы пароли и настройки не хранились в коде.
-
-**TypeORM** — это ORM (Object-Relational Mapping), который преобразует:
-- TypeScript-классы → таблицы в БД
-- Объекты → записи в таблицах
-- Методы → SQL-запросы
-
-```typescript
-import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { ProductsModule } from './modules/products/products.module';
-
-@Module({
-  imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-      envFilePath: '.env', // явно указываем путь (опционально)
-    }),
-    TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        host: configService.get('DB_HOST'),
-        port: configService.get<number>('DB_PORT'),
-        username: configService.get('DB_USERNAME'),
-        password: configService.get('DB_PASSWORD'),
-        database: configService.get('DB_DATABASE'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: configService.get('DB_SYNCHRONIZE') === 'true',
-        logging: configService.get('DB_LOGGING') === 'true',
-      }),
-      inject: [ConfigService],
-    }),
-    ProductsModule,
-  ],
-})
-export class AppModule {}
-```
-**Синхронизация (synchronize: true):**  
-Включайте ТОЛЬКО для разработки. В продакшене используйте миграции, иначе можно потерять данные!
----
-
-## 6. Создание сущностей (Entity)
-
- После настройки TypeORM нужно создать сущности (entities) — это TypeScript-классы, которые описывают таблицы в базе данных. Каждая сущность соответствует одной таблице, а её свойства — колонкам. Создадим сущность `product` со следующими атрибутами:
-- **id** — уникальный идентификатор (автоинкремент)
-- **name** — название товара (строка, ≥3 символов)
-- **description** — описание товара (опционально)
-- **price** — цена товара (число, ≥0)
-- **category** — категория товара (например, "Электроника", "Книги")
-- **inStock** — наличие на складе (булево значение)
-- **stockQuantity** — количество на складе (целое число, ≥0)
-- **isDeleted** — флаг мягкого удаления (скрыто от клиента)
-- **createdAt** — дата создания записи
-- **updatedAt** — дата последнего обновления
-
-**Файл:** `src/entities/product.entity.ts`
-
-```typescript
-import {
-  Entity,
-  Column,
-  PrimaryGeneratedColumn,
-  CreateDateColumn,
-  UpdateDateColumn,
-} from 'typeorm';
-import { Exclude } from 'class-transformer';
-
-// Трансформер decimal → number
-const numberTransformer = {
-  to: (value: number) => value,
-  from: (value: string | null) =>
-    value !== null ? parseFloat(value) : null,
-};
-
-@Entity('products')
-export class ProductEntity {
-  @PrimaryGeneratedColumn()
-  id: number;
-
-  @Column({ length: 255 })
-  name: string;
-
-  @Column('text', { nullable: true })
-  description: string;
-
-  @Column('decimal', {
-    precision: 10,
-    scale: 2,
-    transformer: numberTransformer,
-  })
-  price: number;
-
-  @Column({ name: 'category', length: 100, nullable: true })
-  category: string;
-
-  @Column({ name: 'in_stock', default: true })
-  inStock: boolean;
-
-  @Column({ name: 'stock_quantity', default: 0 })
-  stockQuantity: number;
-
-  @Exclude()
-  @Column({ name: 'is_deleted', default: false })
-  isDeleted: boolean;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
-
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
-}
-
-**Зачем нужен @Exclude()?**  
-Этот декоратор скрывает поле `isDeleted` при преобразовании в JSON. Клиент не должен видеть флаг удаления.
-
+MINIO_PORT=9000
+MINIO_ACCESS_KEY=root
+MINIO_SECRET_KEY=rootpassword
+MINIO_BUCKET=titration
 ```
 
-| Декоратор | Описание | Пример |
-|-----------|----------|--------|
-| `@Entity()` | Помечает класс как сущность базы данных | `@Entity('products')` |
-| `@PrimaryGeneratedColumn()` | Автоинкрементный первичный ключ | `@PrimaryGeneratedColumn()` |
-| `@Column()` | Обычное поле таблицы | `@Column({ length: 255 })` |
-| `@CreateDateColumn()` | Автоматически заполняемая дата создания | `@CreateDateColumn()` |
-| `@UpdateDateColumn()` | Автоматически обновляемая дата изменения | `@UpdateDateColumn()` |
+Таблицы создаёт файл `scripts/seed.sql`. Поэтому `DB_SYNCHRONIZE=false` — ORM схему не трогает.
 
 ---
 
-## 7. Реализация репозитория для работы с БД
-
-**Репозиторий — это "посредник" между сервисом и БД.**  
-Задачи репозитория:
-1. Выполнять SQL-запросы
-2. Преобразовывать данные из БД в объекты
-3. Скрывать сложность SQL от бизнес-логики
-
-**@Injectable()** — это пометка, что класс можно "инжектировать" (внедрять) в другие классы через конструктор, как зависимость.
-
-**TypeORM** сам создаёт репозитории, потому что они стандартные для каждой сущности: `find`, `save`, `delete` и другие базовые методы одинаковы для всех таблиц.
-
-Для начала попробуем реализовать метод `GET` запроса:
-
-**Файл:** `src/modules/products/repositories/typeorm-products.repository.ts`
-
-```typescript
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { ProductEntity } from '../../../entities/product.entity';
-
-@Injectable()
-export class TypeORMProductsRepository {
-  constructor(
-    @InjectRepository(ProductEntity)
-    private repository: Repository<ProductEntity>,
-  ) {}
-
-  async findAll(): Promise<ProductEntity[]> {
-    // Возвращаем все продукты без фильтрации
-    return await this.repository.find();
-  }
-}
-```
-
----
-
-## 8. DTO. Сервис с бизнес-логикой
-
-По заданию при `GET` запросе, мы не должны видеть удаленные продукты. Для этого реализуем `DTO`.
-**DTO (Data Transfer Object)** — это классы для передачи данных между клиентом и сервером.
-Представьте, что вы отправляете посылку:
-
-    - Сущность (Entity) — это весь ваш дом со всеми вещами внутри
-
-    - DTO — это коробка, в которую вы кладете только нужные вещи для отправки. В нашем случае мы положим все кроме поля IsDeleted.
-
-**Файл:** `src/modules/products/dto/product-response.dto.ts`
-
-```typescript
-export class ProductResponseDto {
-  id: number;
-  name: string;
-  description: string | null;
-  price: number;
-  category: string | null;
-  inStock: boolean;
-  stockQuantity: number;
-  createdAt: Date;
-  updatedAt: Date;
-}
-```
-**Файл `products.service.ts` — это бизнес-логика приложения.** Здесь пишут всю работу с данными: фильтрацию, преобразование сущностей в `DTO`, проверки, расчеты. Это посредник между контроллером (получает запрос) и репозиторием (работает с базой).
-
-**Файл:** `src/modules/products/services/products.service.ts`
-
-```typescript
-import { Injectable } from '@nestjs/common';
-import { TypeORMProductsRepository } from './repositories/typeorm-products.repository';
-import { ProductResponseDto } from './dto/product-response.dto';
-
-@Injectable()
-export class ProductsService {
-  constructor(
-    private readonly productsRepository: TypeORMProductsRepository,
-  ) {}
-
-async findAll(): Promise<ProductResponseDto[]> {
-  const products = await this.productsRepository.findAll();
-  const activeProducts = products.filter(product => !product.isDeleted);
-  
-  return activeProducts.map(product => {
-    const { isDeleted, ...productData } = product;
-    return productData as ProductResponseDto;
-  });
-}
-}
-```
----
-
-## 9. Контроллер и REST API маршруты
-
-**Контроллер — это "входная дверь" API:**
-- Принимает HTTP-запросы
-- Проверяет данные (валидация)
-- Вызывает сервис для обработки
-- Возвращает ответ клиенту
-
-**Файл:** `src/modules/products/controllers/products.controller.ts`
-
-```typescript
-import { Controller, Get } from '@nestjs/common';
-import { ProductsService } from './services/products.service';
-import { ProductResponseDto } from './dto/product-response.dto';
-
-@Controller('products')
-export class ProductsController {
-  constructor(private readonly productsService: ProductsService) {}
-
-  @Get()
-  async getAllProducts(): Promise<ProductResponseDto[]> {
-    return this.productsService.findAll();
-  }
-}
-```
----
-
-### Что делает этот контроллер:
-1. `@Controller('products')` — слушает запросы по пути `/products`
-2. `@Get()` — обрабатывает GET-запрос на `/products`
-3. Вызывает `productsService.findAll()` для получения данных
-4. Возвращает DTO-объекты клиенту
-
----
-
-## 10. Модуль ProductsModule
-
-**Модуль в NestJS — это "контейнер":**  
-Он группирует связанные компоненты:
-- Контроллеры (обработчики запросов)
-- Сервисы (бизнес-логика)
-- Репозитории (работа с БД)
-
-**Без модуля NestJS не поймет,** как связать контроллер, сервис и репозиторий.
-
-**Файл:** `src/modules/products/products.module.ts`
-
-```typescript
-import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { ProductEntity } from '../../entities/product.entity';
-import { ProductsController } from './controllers/products.controller';
-import { ProductsService } from './services/products.service';
-import { TypeORMProductsRepository } from './repositories/typeorm-products.repository';
-
-@Module({
-  imports: [TypeOrmModule.forFeature([ProductEntity])],
-  controllers: [ProductsController],
-  providers: [
-    ProductsService,
-    TypeORMProductsRepository, // Просто добавляем репозиторий
-  ],
-  exports: [ProductsService],
-})
-export class ProductsModule {}
-```
-
----
-
-## 11. Валидация и глобальные пайпы
-
-**Зачем валидация?**  
-Чтобы защитить API от некорректных данных:
-- Проверка типов (число/строка/булево)
-- Проверка диапазонов (цена ≥ 0)
-- Проверка обязательных полей
-
-**Пайпы (Pipes) в NestJS** — это middleware для трансформации и валидации данных перед попаданием в контроллер.
-
-### 11.1 Настройка глобальной валидации в `main.ts`
-
-```typescript
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
-import { ClassSerializerInterceptor } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
-
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  app.setGlobalPrefix('api');
-  // Валидация DTO
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-  }));
-
-  // Автоматически скрывает поля с @Exclude() (например, isDeleted)
-  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
-
-  await app.listen(3000);
-  console.log(`Application is running on: http://localhost:3000`);
-}
-bootstrap();
-```
----
-
-### 11.2 Параметры ValidationPipe:
-
-| Параметр | Значение по умолчанию | Описание |
-|----------|----------------------|----------|
-| `whitelist` | `false` | Удаляет поля, не описанные в DTO |
-| `forbidNonWhitelisted` | `false` | Выбрасывает ошибку при лишних полях |
-| `transform` | `false` | Преобразует типы данных |
-| `disableErrorMessages` | `false` | Отключает сообщения об ошибках |
-
----
-
-
-## 12. Тестирование GET в Postman
-1. Поднимете `docke контейнер` командой `docker compose up`:
-
-   ![](images/1.png)
-
-2. Проверьте, что `PostgreSQL` и `MinIo`в состоянии `listening`
-3. Запустите ваш проект: `npm run start:dev`
-
-    ![](images/2.png)
-
-4. Скачайте `Postman` с официального сайта: https://www.postman.com/downloads/
-5. Установите и откройте приложение
-6. Создайте новый `GET` запрос: 
-
-```text
-http://localhost:3000/api/products
-```
-
-  ![](images/3.png)
-
-Отлично! Вы сделали первый `REST IP` запрос! Теперь давайте реализуем `POST` запрос.
-
----
-
-## 13. POST запрос
-
-**Как работает POST-запрос:**
-1. Клиент отправляет JSON в теле запроса
-2. NestJS автоматически преобразует JSON в DTO
-3. `class-validator` проверяет данные по правилам из DTO
-4. Если ошибок нет — данные попадают в сервис
-
-
-Создайте `dto` для `POST` запроса. Добавьте сюда немного логики обработки ошибок, например цена не может быть отрицательной.
-**Файл:** `src/modules/products/dto/create-product.dto.ts`
-
-```typescript
-import {
-  IsString,
-  IsNumber,
-  Min,
-  MinLength,
-  IsOptional,
-  IsBoolean,
-} from 'class-validator';
-import { Type } from 'class-transformer';
-
-export class CreateProductDto {
-  @IsString()
-  @MinLength(3, { message: 'Название должно быть не менее 3 символов' })
-  name: string;
-
-  @IsString()
-  @IsOptional()
-  description?: string;
-
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0, { message: 'Цена не может быть отрицательной' })
-  price: number;
-
-  @IsString()
-  @IsOptional()
-  category?: string;
-
-  @IsBoolean()
-  @IsOptional()
-  inStock?: boolean;
-
-  @Type(() => Number)
-  @Min(0)
-  @IsOptional()
-  @IsNumber()
-  stockQuantity?: number;
-}
-
-```
-**Важно:** `@Type(() => Number)` преобразует строку из JSON в число, так как в HTTP все данные передаются как строки.
-
-В репозиторий также добавим метод POST:
-
-**Файл:** `src/modules/products/repositories/typeorm-products.repository.ts`
-
-```typescript
-  async create(data: Partial<ProductEntity>): Promise<ProductEntity> {
-  const product = this.repository.create(data);
-  return await this.repository.save(product);
-  }
-```
-В **файле:** `src/modules/products/services/products.service.ts` сделайте импорт
-```typescript
-import { CreateProductDto } from './dto/create-product.dto';
-```
-и добавте следующий код:
-
-```typescript
-async create(createProductDto: CreateProductDto): Promise<ProductResponseDto> {
-  if (createProductDto.stockQuantity === 0) {
-    createProductDto.inStock = false;
-  }
-    
-  const product = await this.productsRepository.create(createProductDto);
-  const { isDeleted, ...productWithoutDeleted } = product;
-  return productWithoutDeleted as ProductResponseDto;
-}
-```
-
-В **файле:** `src/modules/products/controllers/products.controller.ts` сделайте импорт
-```typescript
-import { CreateProductDto } from './dto/create-product.dto';
-```
-и добавте следующий код:
-
-```typescript
-  @Post()
-  async createProduct(
-    @Body() createProductDto: CreateProductDto
-  ): Promise<ProductResponseDto> {
-    return this.productsService.create(createProductDto);
-  }
-```
-
-Снова запустите код приложения и сделайте пост запрос в `Postman`:
-```text
-http://localhost:3000/api/products
-```
-Тело json:
-```json
-{
-  "name": "test",
-  "description": "этот объект должен стать 6 в бд",
-  "price": 1000,
-  "category": "Электроника",
-  "stockQuantity": 10
-}
-```
-
-![](images/4.png)
-
----
-
-## 14. GET запрос одной услуги и фильтры
-
-**Фильтрация — важная функция API,** которая позволяет:
-- Искать товары по названию/описанию
-- Фильтровать по категории, цене, наличию
-- Сортировать результаты
-
-**Почему Query-параметры?**  
-Для фильтрации используем query-параметры (`?category=Электроника`), а не path-параметры (`/category/Электроника`), потому что:
-1. Можно комбинировать фильтры
-2. Неограниченное количество параметров
-3. Стандартная практика REST
-
-Чтобы было удобнее отслеживать услуги и сортировать, необходимо добавить вызов одной услуги, а также фильтры на вызов всех услуг. Давайте это реализуем.
-**Файл:** `src/modules/products/dto/product-filters.dto.ts`
-```typescript
-import { IsOptional, IsString, IsBoolean, IsNumber, Min } from 'class-validator';
-import { Type } from 'class-transformer';
-
-export class ProductFiltersDto {
-  @IsOptional()
-  @IsString()
-  search?: string;
-
-  @IsOptional()
-  @IsString()
-  category?: string;
-
-  @IsOptional()
-  @Type(() => Boolean)
-  @IsBoolean()
-  inStock?: boolean;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  minPrice?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  maxPrice?: number;
-
-  @IsOptional()
-  @Type(() => Boolean)
-  @IsBoolean()
-  includeDeleted?: boolean;
-}
-
-```
-
-Изменим репозиторий. Добавим `findById`, а также изменим `findAll`, добавив туда фильтры.
-```typescript
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { ProductEntity } from '../../../entities/product.entity';
-import { ProductFiltersDto } from '../dto/product-filters.dto'; // путь поправь под себя
-
-@Injectable()
-export class TypeORMProductsRepository {
-  constructor(
-    @InjectRepository(ProductEntity)
-    private readonly repository: Repository<ProductEntity>,
-  ) {}
-
-  async findAll(filters?: ProductFiltersDto): Promise<ProductEntity[]> {
-    const query = this.repository.createQueryBuilder('product');
-
-    if (!filters?.includeDeleted) {
-      query.where('product.is_deleted = false');
-    }
-
-    if (filters?.search) {
-      query.andWhere(
-        '(product.name ILIKE :search OR product.description ILIKE :search)',
-        { search: `%${filters.search}%` },
-      );
-    }
-
-    if (filters?.category) {
-      query.andWhere('product.category = :category', {
-        category: filters.category,
-      });
-    }
-
-    if (filters?.inStock !== undefined) {
-      query.andWhere('product.in_stock = :inStock', {
-        inStock: filters.inStock,
-      });
-    }
-
-    if (filters?.minPrice !== undefined) {
-      query.andWhere('product.price >= :minPrice', {
-        minPrice: filters.minPrice,
-      });
-    }
-
-    if (filters?.maxPrice !== undefined) {
-      query.andWhere('product.price <= :maxPrice', {
-        maxPrice: filters.maxPrice,
-      });
-    }
-
-    return await query.getMany();
-  }
-
-  async findById(id: number): Promise<ProductEntity | null> {
-    return await this.repository.findOne({
-      where: { id },
-    });
-  }
-
-  async create(data: Partial<ProductEntity>): Promise<ProductEntity> {
-    const product = this.repository.create(data);
-    return await this.repository.save(product);
-  }
-}
-```
-В **файле:** `src/modules/products/services/products.service.ts` сделайте импорт
-
-```typescript
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { TypeORMProductsRepository } from './repositories/typeorm-products.repository';
-import { ProductResponseDto } from './dto/product-response.dto';
-import { CreateProductDto } from './dto/create-product.dto';
-import { ProductFiltersDto } from './dto/product-filters.dto';
-
-@Injectable()
-export class ProductsService {
-  constructor(
-    private readonly productsRepository: TypeORMProductsRepository,
-  ) {}
-
-  async findAll(filters: ProductFiltersDto): Promise<ProductResponseDto[]> {
-    // по умолчанию не показываем удалённые
-    if (filters.includeDeleted === undefined) {
-      filters.includeDeleted = false;
-    }
-
-    const products = await this.productsRepository.findAll(filters);
-
-    return products.map(product => {
-      const { isDeleted, ...productData } = product;
-      return productData as ProductResponseDto;
-    });
-  }
-
-  async findById(id: number): Promise<ProductResponseDto> {
-    const product = await this.productsRepository.findById(id);
-
-    if (!product || product.isDeleted) {
-      throw new NotFoundException(`Товар с ID ${id} не найден`);
-    }
-
-    const { isDeleted, ...productData } = product;
-    return productData as ProductResponseDto;
-  }
-
-  async create(
-    createProductDto: CreateProductDto,
-  ): Promise<ProductResponseDto> {
-    if (createProductDto.stockQuantity === 0) {
-      createProductDto.inStock = false;
-    }
-
-    const product = await this.productsRepository.create(createProductDto);
-    const { isDeleted, ...productData } = product;
-
-    return productData as ProductResponseDto;
-  }
-}
-
-```
-В **файле:** `src/modules/products/controllers/products.controller.ts` сделайте новые импорты и добавьте методы.
-```typescript
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Param,
-  Query,
-  ParseIntPipe,
-} from '@nestjs/common';
-import { ProductsService } from './services/products.service';
-import { ProductResponseDto } from './dto/product-response.dto';
-import { CreateProductDto } from './dto/create-product.dto';
-import { ProductFiltersDto } from './dto/product-filters.dto';
-
-@Controller('products')
-export class ProductsController {
-  constructor(private readonly productsService: ProductsService) {}
-
-  @Get()
-  async getAllProducts(
-    @Query() filters: ProductFiltersDto,
-  ): Promise<ProductResponseDto[]> {
-    return this.productsService.findAll(filters);
-  }
-
-  @Get(':id')
-  async getProductById(
-    @Param('id', ParseIntPipe) id: number,
-  ): Promise<ProductResponseDto> {
-    return this.productsService.findById(id);
-  }
-
-  @Post()
-  async createProduct(
-    @Body() createProductDto: CreateProductDto,
-  ): Promise<ProductResponseDto> {
-    return this.productsService.create(createProductDto);
-  }
-}
-```
-Отлично! Давайте запустим проект и проверим новые запросы.
-
-1. `GET` фильтр:
-```text
- http://localhost:3000/api/products?category=Электроника&inStock=true&minPrice=1000&maxPrice=25000&search=test
- ```
-
-![](images/7.png)
-
-2. `GET` 1 услуги:
-
-```text
-http://localhost:3000/api/products/2
-```
-
-![](images/6.png)
-
----
-
-## 15. PUT и DELETE запросы
-
-**Мягкое удаление (soft delete) vs физическое удаление:**
-- **Мягкое** — ставим флаг `isDeleted: true`, товар скрывается
-- **Физическое** — удаляем запись из БД навсегда
-
-**Почему мягкое удаление лучше?**
-1. Можно восстановить товар
-2. Сохраняется история заказов
-3. Не нарушаются внешние ключи
-
-Реализуем метод `DELETE`. Важно! В данном примере мы не будем удалять записать из самой БД, а будем лишь её скрывать. Это значит, что мы будем изменять соответсвующее поле, поэтому вместе с методом `DELETE` нам нужно реализовать `PUT`.
-
-Создайте `dto` для `PUT` запроса. 
-**Файл:** `src/modules/products/dto/update-product.dto.ts`
-```typescript
-import {
-  IsString,
-  IsNumber,
-  Min,
-  MinLength,
-  IsOptional,
-  IsBoolean,
-} from 'class-validator';
-import { Type } from 'class-transformer';
-
-export class UpdateProductDto {
-  @IsString()
-  @IsOptional()
-  @MinLength(3)
-  name?: string;
-
-  @IsString()
-  @IsOptional()
-  description?: string;
-
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  @IsOptional()
-  price?: number;
-
-  @IsString()
-  @IsOptional()
-  category?: string;
-
-  @IsBoolean()
-  @IsOptional()
-  inStock?: boolean;
-
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  @IsOptional()
-  stockQuantity?: number;
-}
-```
-
-  Внесем изменения в репозиторий:
-  **Файл:** `src/modules/products/repositories/typeorm-products.repository.ts`
-```typescript
-    async update(
-    id: number,
-    data: Partial<ProductEntity>,
-  ): Promise<ProductEntity> {
-    await this.repository.update(id, data);
-
-    const updatedProduct = await this.findById(id);
-    if (!updatedProduct) {
-      throw new Error(`Product with id ${id} not found after update`);
-    }
-
-    return updatedProduct;
-  }
-
-  async softDelete(id: number): Promise<void> {
-    await this.repository.update(id, {
-      isDeleted: true,
-      inStock: false,
-    });
-  }
-```
-
-В **файле:** `src/modules/products/services/products.service.ts` сделайте импорт
-```typescript
-import { Injectable, NotFoundException, BadRequestException, } from '@nestjs/common';
-import { UpdateProductDto } from './dto/update-product.dto';
-```
-И добавьте методы:
-```typescript
-  async update(
-    id: number,
-    updateProductDto: UpdateProductDto,
-  ): Promise<ProductResponseDto> {
-    const product = await this.productsRepository.findById(id);
-
-    if (!product) {
-      throw new NotFoundException(`Товар с ID ${id} не найден`);
-    }
-
-    if (product.isDeleted) {
-      throw new BadRequestException('Нельзя обновлять удалённый товар');
-    }
-
-    if (updateProductDto.stockQuantity !== undefined) {
-      updateProductDto.inStock = updateProductDto.stockQuantity > 0;
-    }
-
-    const updatedProduct = await this.productsRepository.update(
-      id,
-      updateProductDto,
-    );
-
-    const { isDeleted, ...productData } = updatedProduct;
-    return productData as ProductResponseDto;
-  }
-  async remove(id: number): Promise<void> {
-    const product = await this.productsRepository.findById(id);
-
-    if (!product || product.isDeleted) {
-      throw new NotFoundException(`Товар с ID ${id} не найден`);
-    }
-
-    await this.productsRepository.softDelete(id);
-  }
-```
-В **файле:** `src/modules/products/controllers/products.controller.ts` сделайте новые импорты и добавьте методы. Итоговый файл выглядит так:
-
-```typescript
-import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Delete,
-  Body,
-  Param,
-  Query,
-  ParseIntPipe,
-} from '@nestjs/common';
-import { ProductsService } from './services/products.service';
-import { ProductResponseDto } from './dto/product-response.dto';
-import { CreateProductDto } from './dto/create-product.dto';
-import { ProductFiltersDto } from './dto/product-filters.dto';
-import { UpdateProductDto } from './dto/update-product.dto';
-
-@Controller('products')
-export class ProductsController {
-  constructor(private readonly productsService: ProductsService) {}
-
-  @Get()
-  async getAllProducts(
-    @Query() filters: ProductFiltersDto,
-  ): Promise<ProductResponseDto[]> {
-    return this.productsService.findAll(filters);
-  }
-
-  @Get(':id')
-  async getProductById(
-    @Param('id', ParseIntPipe) id: number,
-  ): Promise<ProductResponseDto> {
-    return this.productsService.findById(id);
-  }
-
-  @Post()
-  async createProduct(
-    @Body() createProductDto: CreateProductDto,
-  ): Promise<ProductResponseDto> {
-    return this.productsService.create(createProductDto);
-  }
-  @Put(':id')
-  async updateProduct(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() updateProductDto: UpdateProductDto,
-  ): Promise<ProductResponseDto> {
-    return this.productsService.update(id, updateProductDto);
-  }
-
-@Delete(':id')
-async deleteProduct(
-  @Param('id', ParseIntPipe) id: number,
-) {
-  await this.productsService.remove(id);
-  return {
-    message: `Товар с ID ${id} успешно удален`,
-    status: 'success',
-    timestamp: new Date().toISOString()
-  };
-}
-}
-
-```
-
-1. Проверим `PUT` запрос:
-
-```text
-http://localhost:3000/api/products/6
-```
-
-```json
-{
-  "name": "Ноутбук Asus",
-  "price": 52999,
-  "stockQuantity": 8
-}
-```
-
-![](images/8.png)
-
-Проверим что услуга действительно изменилась:
-
-![](images/9.png)
-
-
-2. Проверим `DELETE` запрос:
-
-```text
-http://localhost:3000/api/products/1
-```
-
-![](images/10.png)
-
-Проверим что услуга действительно удалилась:
-
-![](images/11.png)
-
-Отлично! Мы реализовали основные запросы необходимые для сервиса. Остальные запросы буду делаться аналогично, просто выполняться с другими сущностями и с другой бизнес-логикой.
-
----
-
-## 16. MinIo
-
-**MinIO — это S3-совместимое объектное хранилище.**  
-Зачем оно нужно вместо сохранения файлов на диск сервера?
-1. **Масштабируемость** — файлы отдельно от приложения
-2. **Надежность** — репликация данных
-3. **Производительность** — отдача файлов напрямую из хранилища
-
-**Как это работает:**
-1. Файл → MinIO → возвращает URL
-2. URL сохраняем в БД
-3. При запросе генерируем временную ссылку (signed URL)
-
-Давайте реализуем сервис связанный с картинками:
-`POST` добавление изображения.Добавление изображения по id услуги, старое изображение заменяется/удаляется. Название изображение генерируется на латинице.
-
-Установим зависимости:
+## Все HTTP-методы
+
+Всего 18 маршрутов: 6 SSR и 12 REST.
+
+| Метод | URL | Что делает |
+|-------|-----|------------|
+| `GET` | `/grid` | Сетка опытов. Фильтр `?concentration=` |
+| `GET` | `/add` | Форма добавления |
+| `POST` | `/add` или `/add/step1` | Создать черновик по названию → редирект на `/add` |
+| `POST` | `/add/publish` | Опубликовать черновик → редирект на `/grid` |
+| `POST` | `/delete` | Удалить опыт (логически) → редирект на `/grid` |
+| `GET` | `/feed` или `/feed/:id` | Лента опубликованных опытов |
+| `GET` | `/api/services` | Список опубликованных. Фильтр `?minConcentration=` |
+| `GET` | `/api/services/feed` | Лента опубликованных |
+| `GET` | `/api/services/feed/:id` | Одна запись ленты, `?next=true` — следующая |
+| `GET` | `/api/services/draft` | Черновик текущего пользователя |
+| `POST` | `/api/services` | Создать черновик (multipart: `title`, `image`, `video`) |
+| `POST` | `/api/services/:id/image` | Заменить картинку (multipart: `image`) |
+| `PUT` | `/api/services/:id/publish` | Публикация: `draft` → `published` |
+| `DELETE` | `/api/services/:id` | Логическое удаление |
+| `POST` | `/api/services/:id/like` | Лайк `{"value":1}` или снятие `{"value":0}` |
+| `POST` | `/api/users/register` | Регистрация |
+| `POST` | `/api/users/login` | Вход — пока заглушка |
+| `POST` | `/api/users/logout` | Выход — пока заглушка |
+
+### REST API
+
+**`GET /api/services`** — отдаёт только опубликованные записи, сортировка по `id`.
+Query-параметр `minConcentration` (число ≥ 0) — если задан, отбирает записи с `concentration >=` этого числа.
 
 ```bash
-npm install minio
-npm install multer
-npm install -D @types/multer
+curl "http://localhost:3000/api/services?minConcentration=0.1"
 ```
-Создадим простой `MinIo` сервис
-**файл:** `rc/modules/products/services/minio.service.ts`
 
-```typescript
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import * as Minio from 'minio';
+**`GET /api/services/feed`** — то же самое, но без фильтра.
 
-@Injectable()
-export class MinioSimpleService {
-  private minioClient: Minio.Client;
-  private bucketName: string;
+**`GET /api/services/feed/:id`** — одна запись ленты. `:id` — число. Если добавить `?next=true`, вернётся следующая запись. Если следующей записи нет — `404`.
 
-  constructor(private configService: ConfigService) {
-    this.bucketName = this.configService.get<string>('MINIO_BUCKET')!;
-    
-    this.minioClient = new Minio.Client({
-      endPoint: this.configService.get<string>('MINIO_ENDPOINT')!,
-      port: this.configService.get<number>('MINIO_PORT')!,
-      useSSL: this.configService.get<string>('MINIO_USE_SSL')! === 'true',
-      accessKey: this.configService.get<string>('MINIO_ACCESS_KEY')!,
-      secretKey: this.configService.get<string>('MINIO_SECRET_KEY')!,
-    });
+**`GET /api/services/draft`** — черновик того, кто сейчас «залогинен» (см. `currentUser()`). Если черновика нет — `404`.
 
-    this.initializeBucket();
+**`POST /api/services`** — создаёт черновик. Тело — `multipart/form-data`:
+
+| Поле | Обязательно | Ограничения |
+|------|-------------|-------------|
+| `title` | да | непустая строка |
+| `image` | нет | jpg, jpeg, png, gif, webp; до 10 МБ |
+| `video` | нет | mp4, webm, mov; до 10 МБ |
+
+Ответ `201`. В БД сразу ставится `status = 'draft'`, а в `image_url` / `video_url` кладётся только имя файла из MinIO.
+
+```bash
+curl -X POST http://localhost:3000/api/services -F "title=Опыт №1" -F "image=@photo.jpg"
+```
+
+**`POST /api/services/:id/image`** — заменяет картинку. Старый файл при этом удаляется из MinIO. Менять может только автор опыта, иначе `403`.
+
+**`PUT /api/services/:id/publish`** — публикует черновик. Тело — JSON:
+
+| Поле | Обязательно | Ограничения |
+|------|-------------|-------------|
+| `description` | нет | строка |
+| `ph` | нет | число от 0 до 14 |
+| `concentration` | нет | число ≥ 0 |
+
+Сервер сам ставит `status = 'published'`, `formed_at = NOW()` и `moderator_id`. Эти поля из запроса принять нельзя — вернуться из `published` в `draft` нельзя, попытка даёт `400`.
+
+**`DELETE /api/services/:id`** — запись физически остаётся в БД, но получает `status = 'deleted'` и пропадает из всех списков. Ответ: `{"id": 1, "status": "deleted"}`.
+
+**`POST /api/services/:id/like`** — тело `{"value": 1}` поставить лайк, `{"value": 0}` снять. Значение может быть только 0 или 1, иначе `400`. Повторный лайк не создаёт дубль — за это отвечает уникальный индекс в БД. Ответ: `{"liked": true, "likes_count": 4}`.
+
+**`POST /api/users/register`** — тело `{"username": "ivanov"}`. Имя должно быть непустым и уникальным, иначе `400` или `409`.
+
+**`POST /api/users/login`** и **`POST /api/users/logout`** — заглушки под лабораторную №4, всегда возвращают `{"message": "...", "stub": true}`.
+
+### SSR-маршруты
+
+Отдают HTML, а не JSON.
+
+**`GET /grid`** — берёт из БД опубликованные записи и считает лайки:
+
+```sql
+SELECT t.*, COUNT(l.id) AS likes_count
+FROM titrations t
+LEFT JOIN likes l ON t.id = l.titration_id
+WHERE t.status = 'published'
+GROUP BY t.id ORDER BY t.id ASC;
+```
+
+**`GET /add`** — одна страница, но на ней два шага. Если черновика ещё нет — показывается поле для названия. Если есть — поля для медиа, описания, pH и концентрации.
+
+**`POST /add/step1`** — принимает `title` и создаёт черновик со значениями по умолчанию (`ph = 7.0`, `concentration = 0.10`, `creator_id = 1`). Пустое название заменяется на «Новый опыт».
+
+**`POST /add/publish`** — если в теле есть `id`, обновляет черновик, иначе вставляет новую запись. Принимает `id`, `title`, `description`, `ph`, `concentration`, `image_url`, `video_url` и файлы `image`, `video`. Файлы грузятся в MinIO под именем `<время>-<исходное имя>`.
+
+**`POST /delete`** — принимает `id` и делает `UPDATE titrations SET status = 'deleted'`.
+
+**`GET /feed/:id`** — если `:id` не найден среди опубликованных, бросается `404`.
+
+### Что может вернуться вместо успеха
+
+| Код | Когда |
+|-----|-------|
+| `400` | Не прошла валидация, лишние поля в запросе, нельзя опубликовать не-черновик |
+| `403` | Действует не автор опыта |
+| `404` | Опыта нет или он удалён, черновика нет, в ленте нет следующей записи |
+| `409` | Такой `username` уже есть |
+
+---
+
+## Таблицы БД
+
+Три таблицы: `users`, `titrations`, `likes`.
+
+### `users`
+
+| Поле | Тип | Ограничения |
+|------|-----|-------------|
+| `id` | `SERIAL` | первичный ключ |
+| `username` | `VARCHAR(50)` | `NOT NULL`, `UNIQUE` |
+| `created_at` | `TIMESTAMP` | по умолчанию `CURRENT_TIMESTAMP` |
+
+### `titrations`
+
+| Поле | Тип | Ограничения | Зачем |
+|------|-----|-------------|-------|
+| `id` | `SERIAL` | первичный ключ | номер опыта |
+| `title` | `VARCHAR(100)` | `NOT NULL` | название пары веществ |
+| `description` | `VARCHAR(255)` | может быть `NULL` | описание опыта |
+| `status` | `VARCHAR(20)` | `NOT NULL`, по умолчанию `'draft'` | `draft` / `published` / `deleted` |
+| `image_url` | `VARCHAR(255)` | может быть `NULL` | имя файла картинки в MinIO |
+| `video_url` | `VARCHAR(255)` | может быть `NULL` | имя файла видео в MinIO |
+| `ph` | `REAL` | может быть `NULL` | кислотность |
+| `concentration` | `REAL` | может быть `NULL` | концентрация |
+| `created_at` | `TIMESTAMP` | по умолчанию `CURRENT_TIMESTAMP` | когда создана запись |
+| `formed_at` | `TIMESTAMP` | может быть `NULL` | когда опубликован опыт |
+| `creator_id` | `INT` | `NOT NULL`, внешний ключ на `users(id)` | кто создал |
+| `moderator_id` | `INT` | может быть `NULL` | служебное поле, ставится при публикации |
+
+### `likes`
+
+| Поле | Тип | Ограничения |
+|------|-----|-------------|
+| `id` | `SERIAL` | первичный ключ |
+| `user_id` | `INT` | `NOT NULL`, внешний ключ на `users(id)` |
+| `titration_id` | `INT` | `NOT NULL`, внешний ключ на `titrations(id)` |
+
+Плюс ограничение `UNIQUE (user_id, titration_id)` — один пользователь не может поставить два лайка одному опыту.
+
+Все три внешних ключа сделаны с `ON DELETE RESTRICT`, каскадного удаления нет.
+
+### Связи
+
+```
+users (1) ────< (N) titrations      titrations.creator_id
+   │                                         │
+   └──────< (N) likes >────────────── (1) ────┘
+            likes.user_id              likes.titration_id
+```
+
+### Тестовые данные
+
+`scripts/seed.sql` создаёт пользователя `(1, 'admin')` — он же считается текущим, — 6 опубликованных опытов и 4 лайка.
+
+### Что стоит знать
+
+Колонка `moderator_id` есть в `titration.entity.ts` и используется при публикации, но в `scripts/seed.sql` её нет. Так как `DB_SYNCHRONIZE=false`, на чистой базе её нужно добавить руками:
+
+```sql
+ALTER TABLE titrations ADD COLUMN IF NOT EXISTS moderator_id INT NULL;
+```
+
+---
+
+## DTO
+
+Входные данные проверяются глобальным `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`, `transform`). Если в запросе есть поле, которого нет в DTO, приходит `400`.
+
+| DTO | Поле | Правила |
+|-----|------|---------|
+| `CreateServiceDto` | `title` | строка, непустая |
+| `PublishServiceDto` | `description` | строка |
+| | `ph` | число 0…14 |
+| | `concentration` | число ≥ 0 |
+| `LikeDto` | `value` | только 0 или 1 |
+| `RegisterUserDto` | `username` | строка, непустая |
+| `ServiceFiltersDto` | `minConcentration` | число ≥ 0 |
+
+Системные поля (`id`, `status`, `creator_id`, `moderator_id`, даты) от клиента не принимаются.
+
+---
+
+## Модели
+
+Модели — это классы TypeORM из `src/titration/entities/`. Каждый класс соответствует одной таблице в PostgreSQL: первичный ключ помечен `@PrimaryGeneratedColumn()`, связи — `@ManyToOne` вместе с `@JoinColumn`, а колонка `created_at` заполняется сама базой через `@CreateDateColumn()`.
+
+| Модель | Таблица | Файл |
+|--------|---------|------|
+| `User` | `users` | `src/titration/entities/user.entity.ts` |
+| `Titration` | `titrations` | `src/titration/entities/titration.entity.ts` |
+| `Like` | `likes` | `src/titration/entities/like.entity.ts` |
+
+**`User`** — самая простая модель: `id`, `username` (`VARCHAR(50)`, уникальный) и `created_at`.
+
+**`Titration`** — главная модель опыта:
+
+| Свойство | Что означает |
+|----------|--------------|
+| `id` | номер опыта |
+| `title` | название пары веществ |
+| `description` | описание, может быть пустым |
+| `status` | `draft` → `published` → `deleted`, по умолчанию `draft` |
+| `image_url`, `video_url` | **не** ссылки, а имена файлов в MinIO |
+| `ph`, `concentration` | кислотность и концентрация |
+| `created_at` | когда создана запись |
+| `formed_at` | когда опыт опубликован |
+| `moderator_id` | служебное поле, ставится при публикации |
+| `creator` | связь с `User` по колонке `creator_id` |
+
+Поля `moderator_id` и `creator` помечены `@Exclude()`. В `main.ts` (строка 33) глобально подключён `ClassSerializerInterceptor`, поэтому при прямой отдаче сущности в JSON системные поля наружу не уходят.
+
+**`Like`** — таблица-связь: `user` ссылается на `users.id`, `titration` — на `titrations.id`. На уровне класса стоит `@Unique(['user', 'titration'])`, поэтому один пользователь не может поставить два лайка одному опыту.
+
+Все три внешних ключа объявлены с `onDelete: 'RESTRICT'` — каскадного удаления нет, нельзя удалить пользователя или опыт, пока на них кто-то ссылается.
+
+---
+
+## Сериализаторы
+
+Модель нельзя отдавать клиенту как есть: в ней лежат системные поля, которые не должны редактироваться, а в `image_url` и `video_url` хранится не ссылка, а имя файла. Поэтому в `src/api/serializers.ts` лежат отдельные функции.
+
+| Функция | Строки | Что делает |
+|---------|--------|------------|
+| `fileUrl(value)` | 18–22 | из имени файла собирает публичный адрес `http://localhost:9000/titration/<файл>`; если пришёл уже готовый URL — не трогает его |
+| `serializeService(row, likesCount)` | 38–52 | модель `Titration` → объект `ServiceDto` |
+| `serializeUser(row)` | 60–66 | модель `User` → объект `UserDto` |
+
+Что именно делает `serializeService`:
+
+- оставляет только разрешённые поля — `moderator_id` и `creator_id` в ответе нет;
+- превращает `image_url` и `video_url` в готовые ссылки через `fileUrl`;
+- добавляет `likes_count` — количество лайков, которого в таблице `titrations` вообще нет, оно приходит вторым аргументом;
+- приводит `id`, `ph` и `concentration` к типу `Number`, а пустые значения — к `null`.
+
+Возвращается не экземпляр класса, а обычный объект `ServiceDto` — так TypeScript проверяет, что реальная форма ответа совпадает с описанием. Вызывается в `api.service.ts`: строки 54, 103, 133, 172, 211 и 285.
+
+У SSR-слоя своя вёрстка данных: в `app.service.ts` есть отдельные приватные `getFileUrl()` (строка 63) и `formatPair()` (строка 69), которые кладут в шаблон то, что ожидают `grid.hbs`, `add.hbs` и `feed.hbs`. Общего сериализатора у двух слоёв нет намеренно — у них разные формы ответа.
+
+---
+
+## Текущий пользователь: функция-singleton
+
+Полноценной авторизации в этой лабораторной нет, поэтому создатель опыта зафиксирован константой. Функция лежит в `src/api/current-user.ts`:
+
+```ts
+let instance: AuthUser | null = null;
+
+export function currentUser(): AuthUser {
+  if (!instance) {
+    // Константа текущего (создающего) пользователя
+    instance = { id: 1, username: 'admin' };
   }
-
-  private async initializeBucket() {
-    try {
-      const exists = await this.minioClient.bucketExists(this.bucketName);
-      if (!exists) {
-        await this.minioClient.makeBucket(this.bucketName, 'us-east-1');
-        console.log(`Бакет "${this.bucketName}" создан в MinIO`);
-      }
-    } catch (error) {
-      console.error('Ошибка при инициализации бакета MinIO:', error.message);
-    }
-  }
-
-  async uploadProductImage(file: Buffer, productId: number): Promise<string> {
-    const fileName = `product-${productId}-${Date.now()}.jpg`;
-    
-    await this.minioClient.putObject(
-      this.bucketName,
-      fileName,
-      file,
-      file.length,
-      { 'Content-Type': 'image/jpeg' }
-    );
-
-    const protocol = this.configService.get<string>('MINIO_USE_SSL') === 'true' ? 'https' : 'http';
-    const endpoint = this.configService.get<string>('MINIO_ENDPOINT');
-    const port = this.configService.get<number>('MINIO_PORT');
-    
-    return `${protocol}://${endpoint}:${port}/${this.bucketName}/${fileName}`;
-  }
-
-  async getSignedUrl(fileName: string | undefined): Promise<string | null> {
-    if (!fileName) {
-      return null;
-    }
-    
-    // 7 дней = 7 * 24 * 60 * 60 секунд
-    const expiresIn = 7 * 24 * 60 * 60;
-    
-    try {
-      const signedUrl = await this.minioClient.presignedGetObject(
-        this.bucketName,
-        fileName,
-        expiresIn
-      );
-      return signedUrl;
-    } catch (error) {
-      console.error('Ошибка при генерации подписанной ссылки:', error.message);
-      return null;
-    }
-  }
-
-  async deleteFile(fileName: string): Promise<void> {
-    try {
-      await this.minioClient.removeObject(this.bucketName, fileName);
-    } catch (error) {
-      console.error('Ошибка при удалении файла из MinIO:', error.message);
-      throw error;
-    }
-  }
+  return instance;
 }
 ```
-Обновим **файл:** `dto/product-response.dto.ts`:
-```typescript
-// dto/product-response.dto.ts
-export class ProductResponseDto {
-  id: number;
-  name: string;
-  imageUrl: string | null; // Добавьте это поле
-  description: string | null;
-  price: number;
-  category: string | null;
-  inStock: boolean;
-  stockQuantity: number;
-  createdAt: Date;
-  updatedAt: Date;
-}
-```
-В **файле:** `src/entities/product.entity.ts` добавим колонку для картинки:
-```typescript
-  @Column({ name: 'image_url', nullable: true })
-  imageUrl?: string;
-  
-```
-В **файле:** `src/modules/products/services/products.service.ts` добавьте новую реализацию методов:
-```typescript
-import { Injectable, NotFoundException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
-import { TypeORMProductsRepository } from './repositories/typeorm-products.repository';
-import { ProductResponseDto } from './dto/product-response.dto';
-import { CreateProductDto } from './dto/create-product.dto';
-import { ProductFiltersDto } from './dto/product-filters.dto';
-import { UpdateProductDto } from './dto/update-product.dto';
-import { MinioSimpleService } from './services/minio.service';
 
-@Injectable()
-export class ProductsService {
-  constructor(
-    private readonly productsRepository: TypeORMProductsRepository,
-    private minioService: MinioSimpleService,
-  ) {}
+Это singleton: `instance` создаётся один раз лениво, при первом вызове, и дальше переиспользуется всеми методами сервиса — на каждый запрос новый объект не заводится. Значение `id = 1` совпадает с пользователем из `scripts/seed.sql`.
 
-  async findAll(filters: ProductFiltersDto): Promise<ProductResponseDto[]> {
-    // по умолчанию не показываем удалённые
-    if (filters.includeDeleted === undefined) {
-      filters.includeDeleted = false;
-    }
+Функция вызывается в шести методах `ApiService` (`src/api/api.service.ts`):
 
-    const products = await this.productsRepository.findAll(filters);
+| Строка | Метод | Как используется |
+|--------|-------|------------------|
+| 87 | `getDraft()` | ищет черновик: `where: { status: 'draft', creator: { id: user.id } }` |
+| 111 | `createDraft()` | сохраняет `creator: { id: user.id }` у новой записи |
+| 141 | `uploadImage()` | `if (item.creator?.id !== user.id)` → `403` |
+| 180 | `publishDraft()` | та же проверка автора, плюс `moderator_id: user.id` при публикации |
+| 219 | `deleteService()` | `if (item.creator?.id !== user.id)` → `403` |
+| 238 | `setLike()` | ищет лайк: `where: { user: { id: user.id }, titration: { id } }` |
 
-    // Для каждого продукта с изображением генерируем подписанную ссылку
-    const productsWithSignedUrls = await Promise.all(
-      products.map(async (product) => {
-        if (product.imageUrl) {
-          const fileName = product.imageUrl.split('/').pop();
-          try {
-            const signedUrl = await this.minioService.getSignedUrl(fileName);
-            if (signedUrl) {
-              product.imageUrl = signedUrl;
-            } else {
-              delete product.imageUrl;
-            }
-          } catch (error) {
-            console.warn(`Не удалось получить ссылку для файла:`, error);
-            delete product.imageUrl;
-          }
-        }
+Проверки прав работают как обычно, но всегда от имени пользователя `admin` — это ожидаемое поведение заглушки, полноценная авторизация будет в лабораторной №4.
 
-        const { isDeleted, ...productData } = product;
-        return productData as ProductResponseDto;
-      })
-    );
+## Файлы в MinIO
 
-    return productsWithSignedUrls;
-  }
+Бакет `titration`, доступ по адресу `http://localhost:9000/titration/<имя файла>`. Ограничение — 10 МБ, принимаются jpg, jpeg, png, gif, webp (картинки) и mp4, webm, mov (видео). В базе лежит только имя файла, полный URL собирается на лету. Если у опыта нет медиа, подставляются заглушки `public/img/default-image.jpg` и `public/img/default-video.mp4`.
 
-  async findById(id: number): Promise<ProductResponseDto> {
-    const product = await this.productsRepository.findById(id);
+Кто сейчас «залогинен» — см. раздел «Текущий пользователь: функция-singleton».
 
-    if (!product || product.isDeleted) {
-      throw new NotFoundException(`Товар с ID ${id} не найден`);
-    }
-
-    // Генерируем подписанную ссылку для изображения
-    if (product.imageUrl) {
-      const fileName = product.imageUrl.split('/').pop();
-      try {
-        const signedUrl = await this.minioService.getSignedUrl(fileName);
-        if (signedUrl) {
-          product.imageUrl = signedUrl;
-        } else {
-          delete product.imageUrl;
-        }
-      } catch (error) {
-        delete product.imageUrl;
-      }
-    }
-
-    const { isDeleted, ...productData } = product;
-    return productData as ProductResponseDto;
-  }
-
-  async create(
-    createProductDto: CreateProductDto,
-  ): Promise<ProductResponseDto> {
-    if (createProductDto.stockQuantity === 0) {
-      createProductDto.inStock = false;
-    }
-
-    const product = await this.productsRepository.create(createProductDto);
-    const { isDeleted, ...productData } = product;
-
-    return productData as ProductResponseDto;
-  }
-
-  async update(
-    id: number,
-    updateProductDto: UpdateProductDto,
-  ): Promise<ProductResponseDto> {
-    const product = await this.productsRepository.findById(id);
-
-    if (!product) {
-      throw new NotFoundException(`Товар с ID ${id} не найден`);
-    }
-
-    if (product.isDeleted) {
-      throw new BadRequestException('Нельзя обновлять удалённый товар');
-    }
-
-    if (updateProductDto.stockQuantity !== undefined) {
-      updateProductDto.inStock = updateProductDto.stockQuantity > 0;
-    }
-
-    const updatedProduct = await this.productsRepository.update(
-      id,
-      updateProductDto,
-    );
-
-    // Генерируем подписанную ссылку для обновленного продукта
-    if (updatedProduct.imageUrl) {
-      const fileName = updatedProduct.imageUrl.split('/').pop();
-      try {
-        const signedUrl = await this.minioService.getSignedUrl(fileName);
-        if (signedUrl) {
-          updatedProduct.imageUrl = signedUrl;
-        } else {
-          delete updatedProduct.imageUrl;
-        }
-      } catch (error) {
-        delete updatedProduct.imageUrl;
-      }
-    }
-
-    const { isDeleted, ...productData } = updatedProduct;
-    return productData as ProductResponseDto;
-  }
-
-  async remove(id: number): Promise<void> {
-    const product = await this.productsRepository.findById(id);
-
-    if (!product || product.isDeleted) {
-      throw new NotFoundException(`Товар с ID ${id} не найден`);
-    }
-
-    await this.productsRepository.softDelete(id);
-  }
-
-  async uploadImage(
-    id: number,
-    file: Express.Multer.File,
-  ): Promise<ProductResponseDto> {
-    // Проверяем существование товара
-    const product = await this.productsRepository.findById(id);
-    
-    if (!product || product.isDeleted) {
-      throw new NotFoundException(`Товар с ID ${id} не найден`);
-    }
-
-    // Проверяем файл
-    if (!file) {
-      throw new BadRequestException('Файл не предоставлен');
-    }
-
-    if (!file.mimetype.startsWith('image/')) {
-      throw new BadRequestException('Файл должен быть изображением');
-    }
-
-    try {
-      // Удаляем старое изображение, если оно существует
-      if (product.imageUrl) {
-        await this.deleteOldImage(product.imageUrl);
-      }
-
-      // Загружаем новое изображение в MinIO
-      const imageUrl = await this.minioService.uploadProductImage(
-        file.buffer,
-        id,
-      );
-
-      // Обновляем запись товара с новым URL изображения
-      const updatedProduct = await this.productsRepository.update(id, {
-        imageUrl,
-      });
-
-      // Генерируем подписанную ссылку для нового изображения
-      if (updatedProduct.imageUrl) {
-        const fileName = updatedProduct.imageUrl.split('/').pop();
-        try {
-          const signedUrl = await this.minioService.getSignedUrl(fileName);
-          if (signedUrl) {
-            updatedProduct.imageUrl = signedUrl;
-          } else {
-            delete updatedProduct.imageUrl;
-          }
-        } catch (error) {
-          delete updatedProduct.imageUrl;
-        }
-      }
-
-      const { isDeleted, ...productData } = updatedProduct;
-      return productData as ProductResponseDto;
-    } catch (error) {
-      console.error('Ошибка при загрузке изображения:', error);
-      throw new InternalServerErrorException('Не удалось загрузить изображение');
-    }
-  }
-
-  private async deleteOldImage(imageUrl: string): Promise<void> {
-    try {
-      // Извлекаем имя файла из URL
-      const urlParts = imageUrl.split('/');
-      const fileName = urlParts[urlParts.length - 1];
-      
-      // Удаляем файл из MinIO
-      await this.minioService.deleteFile(fileName);
-    } catch (error) {
-      console.warn('Не удалось удалить старое изображение:', error.message);
-      // Не выбрасываем ошибку, так как это не критично
-    }
-  }
-}
-```
-В **файле:** `src/modules/products/products.contoller.ts` добавьте новый метод:
-```typescript
-import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Delete,
-  Param,
-  Body,
-  Query,
-  UseInterceptors,
-  UploadedFile,
-  ParseIntPipe,
-  BadRequestException,
-} from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
-import { ProductsService } from './services/products.service';
-import { ProductResponseDto } from './dto/product-response.dto';
-import { CreateProductDto } from './dto/create-product.dto';
-import { ProductFiltersDto } from './dto/product-filters.dto';
-import { UpdateProductDto } from './dto/update-product.dto';
-
-@Controller('products')
-export class ProductsController {
-  constructor(private readonly productsService: ProductsService) {}
-
-  @Get()
-  async getAllProducts(
-    @Query() filters: ProductFiltersDto,
-  ): Promise<ProductResponseDto[]> {
-    return this.productsService.findAll(filters);
-  }
-
-  @Get(':id')
-  async getProductById(
-    @Param('id', ParseIntPipe) id: number,
-  ): Promise<ProductResponseDto> {
-    return this.productsService.findById(id);
-  }
-
-  @Post()
-  async createProduct(
-    @Body() createProductDto: CreateProductDto,
-  ): Promise<ProductResponseDto> {
-    return this.productsService.create(createProductDto);
-  }
-
-  @Put(':id')
-  async updateProduct(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() updateProductDto: UpdateProductDto,
-  ): Promise<ProductResponseDto> {
-    return this.productsService.update(id, updateProductDto);
-  }
-
-  @Delete(':id')
-  async deleteProduct(
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    await this.productsService.remove(id);
-    return {
-      message: `Товар с ID ${id} успешно удален`,
-      status: 'success',
-      timestamp: new Date().toISOString()
-    };
-  }
-
-  @Post(':id/image')
-  @UseInterceptors(
-    FileInterceptor('image', {
-      storage: memoryStorage(),
-      limits: {
-        fileSize: 5 * 1024 * 1024, // 5MB
-      },
-      fileFilter: (req, file, callback) => {
-        if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
-          return callback(
-            new BadRequestException('Поддерживаются только изображения (jpg, jpeg, png, gif, webp)'),
-            false,
-          );
-        }
-        callback(null, true);
-      },
-    }),
-  )
-  async uploadImage(
-    @Param('id', ParseIntPipe) id: number,
-    @UploadedFile() image: Express.Multer.File,
-  ) {
-    return this.productsService.uploadImage(id, image);
-  }
-}
-```
-**Файл:** `src/modules/products/products.module.ts`
-```typescript
-import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { ProductEntity } from '../../entities/product.entity';
-import { ProductsController } from './controllers/products.controller';
-import { ProductsService } from './services/products.service';
-import { TypeORMProductsRepository } from './repositories/typeorm-products.repository';
-import { MinioSimpleService } from './services/minio.service'; // Добавьте этот импорт
-
-@Module({
-  imports: [TypeOrmModule.forFeature([ProductEntity])],
-  controllers: [ProductsController],
-  providers: [
-    ProductsService,
-    TypeORMProductsRepository,
-    MinioSimpleService, // Добавьте сюда
-  ],
-  exports: [ProductsService],
-})
-export class ProductsModule {}
-```
-
-Теперь попробуем протестировать наш `POST` метод
+## Структура проекта
 
 ```text
-http://localhost:3000/api/products/2/image
-```
-Body:
-1. Выберите form-data
-2. Добавьте ключ: image
-3.  Тип: File (не Text!)
-4.  Нажмите "Select Files" и выберите любое изображение (jpg, png и т.д.)
-
-![](images/12.png)
-
-Отлично! Проверим открывается ли само изображение:
-
-![](images/13.png)
-
----
-
-## 17. Итоговая структура проекта
-```text
-bmstu-lab/
-├── src/
-│   ├── entities/
-│   │   └── product.entity.ts
-│   ├── modules/
-│   │   └── products/
-│   │       ├── controllers/
-│   │       │   └── products.controller.ts
-│   │       ├── services/
-│   │       │   └── products.service.ts
-│   │       │   └── minio.service.ts
-│   │       ├── repositories/
-│   │       │   └── typeorm-products.repository.ts
-│   │       ├── dto/
-│   │       │   ├── create-product.dto.ts
-│   │       │   ├── update-product.dto.ts
-│   │       │   ├── product-response.dto.ts
-│   │       │   └── product-filters.dto.ts
-│   │       └── products.module.ts
-│   ├── app.module.ts
-│   └── main.ts
-├── docker-compose.yml
-├── init.sql
-└── .env
+src/
+├── main.ts                 запуск: hbs, статика, валидация, CORS
+├── app.module.ts           ConfigModule + TypeOrmModule + ApiModule
+├── app.controller.ts       SSR-маршруты
+├── app.service.ts          SSR-логика, прямой SQL
+├── api/
+│   ├── api.controllers.ts  ServicesController, UsersController
+│   ├── api.service.ts      бизнес-логика REST
+│   ├── serializers.ts      превращение сущностей в JSON
+│   ├── current-user.ts     заглушка текущего пользователя
+│   ├── minio.provider.ts   подключение к MinIO
+│   └── dto/                DTO для валидации
+└── titration/entities/     Titration, User, Like
+views/                      grid.hbs, add.hbs, feed.hbs, partials/nav.hbs
+public/                     стили и картинки-заглушки
+scripts/                    migrate.ts и seed.sql
+classes.drawio              диаграмма классов
+rhumbs-classes.drawio       диаграмма классов в стиле референса
+postman_collection.json     готовые запросы для Postman
 ```
 
----
+## Ссылки
 
-## 18. Полезные ссылки
-
-### Официальная документация
-1. **NestJS**
-   - [Официальная документация NestJS](https://docs.nestjs.com/)
-   - [Основы NestJS](https://docs.nestjs.com/first-steps)
-   - [Техники работы с базой данных](https://docs.nestjs.com/techniques/database)
-   - [Валидация](https://docs.nestjs.com/techniques/validation)
-
-2. **TypeORM**
-   - [Документация TypeORM](https://typeorm.io/)
-   - [Сущности и декораторы](https://typeorm.io/entities)
-   - [Миграции](https://typeorm.io/migrations)
-
-3. **PostgreSQL**
-   - [Официальная документация](https://www.postgresql.org/docs/)
-   - [Руководство по установке](https://www.postgresql.org/download/)
-
-4. **MinIO**
-   - [Документация MinIO](https://min.io/docs/minio/linux/index.html)
-
----
+- [NestJS](https://docs.nestjs.com/) — [валидация](https://docs.nestjs.com/techniques/validation), [БД](https://docs.nestjs.com/techniques/database)
+- [TypeORM](https://typeorm.io/) — [сущности](https://typeorm.io/entities)
+- [PostgreSQL](https://www.postgresql.org/docs/current/sql.html)
+- [MinIO](https://min.io/docs/minio/linux/index.html)

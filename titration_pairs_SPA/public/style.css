@@ -402,6 +402,12 @@ body.mobile-body {
   margin-bottom: 12px;
 }
 
+/* Только страница ленты: pH и концентрация прижаты вправо */
+.feed-screen .stats-row {
+  justify-content: flex-end;
+  align-items: center;
+}
+
 .feed-actions {
   display: flex;
   flex-direction: column;

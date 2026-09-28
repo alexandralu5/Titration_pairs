@@ -9,11 +9,11 @@
     { "key": "serviceId", "value": "18" },
     {
       "key": "imagePath",
-      "value": "T:/home/alexandralu/Titration_pairs/titration_pairs_db/public/img/default-image.jpg"
+      "value": "T:/home/alexandralu/Titration_pairs/titration_pairs_SPA/public/img/default-image.jpg"
     },
     {
       "key": "videoPath",
-      "value": "T:/home/alexandralu/Titration_pairs/titration_pairs_db/public/img/default-video.mp4"
+      "value": "T:/home/alexandralu/Titration_pairs/titration_pairs_SPA/public/img/default-video.mp4"
     }
   ],
   "item": [

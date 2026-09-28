@@ -2,6 +2,22 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDa
 import { Exclude } from 'class-transformer';
 import { User } from './user.entity';
 
+/**
+ * Модель "Опыт" (ORM-сущность TypeORM) — центральная сущность проекта.
+ * Отображается на таблицу titrations.
+ *
+ * Разделение полей на три группы:
+ *  1. Бизнес-поля приходят от клиента: title, description, ph, concentration.
+ *  2. Системные поля вычисляются на бэкенде и клиенту НЕ отдаются
+ *     (помечены @Exclude и дополнительно вырезаются в serializers.ts):
+ *     status, creator, moderator_id, created_at, formed_at.
+ *  3. Медиа-поля image_url / video_url содержат ИМЯ файла в MinIO,
+ *     а не путь; публичный URL собирается в сериализаторе fileUrl().
+ *
+ * Жизненный цикл записи: 'draft' -> 'published' -> 'deleted' (soft delete).
+ * Статус нельзя менять произвольно: смена выполняется только двумя методами
+ * (POST create -> draft, PUT publish -> published), вернуться в draft нельзя.
+ */
 @Entity('titrations')
 export class Titration {
   @PrimaryGeneratedColumn()
