@@ -8,7 +8,7 @@ import { ServicesController, UsersController } from './api.controllers';
 import { minioClientProvider } from './minio.provider';
 
 /**
- * Модуль REST-веб-сервиса /api для SPA.
+  * Модуль REST-веб-сервиса /api/titration_pairs для SPA.
  *
  * Зависимости доменов от моделей (в коде):
  *   Домен "Услуга"       (ServicesController, ApiService) -> модели Titration, Like

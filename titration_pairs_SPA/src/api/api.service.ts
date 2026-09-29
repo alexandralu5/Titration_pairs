@@ -36,7 +36,7 @@ export class ApiService {
 
   // ==========================================================================
   // Домен "Услуга" — список с фильтрацией (только опубликованные)
-  // GET /api/services?minConcentration=0.1
+  // GET /api/titration_pairs/services?minConcentration=0.1
   // ==========================================================================
   async listServices(minConcentration?: number): Promise<ServiceDto[]> {
     const where: any = { status: 'published' };
@@ -56,7 +56,7 @@ export class ApiService {
 
   // ==========================================================================
   // Домен "Услуга" — лента (только опубликованные)
-  // GET /api/services/feed
+  // GET /api/titration_pairs/services/feed
   // ==========================================================================
   async feed(): Promise<ServiceDto[]> {
     return this.listServices();
@@ -64,7 +64,7 @@ export class ApiService {
 
   // ==========================================================================
   // Домен "Услуга" — лента по id (?next=true)
-  // GET /api/services/feed/:id?next=true
+  // GET /api/titration_pairs/services/feed/:id?next=true
   // ==========================================================================
   async feedItem(id: number, next: boolean): Promise<ServiceDto> {
     const items = await this.feed();
@@ -81,7 +81,7 @@ export class ApiService {
 
   // ==========================================================================
   // Домен "Услуга" — получение черновика (не более 1 записи, id не указывается)
-  // GET /api/services/draft
+  // GET /api/titration_pairs/services/draft
   // ==========================================================================
   async getDraft(): Promise<ServiceDto> {
     const user = currentUser(); // Singleton-функция с константой пользователя
@@ -105,7 +105,7 @@ export class ApiService {
 
   // ==========================================================================
   // Домен "Услуга" — создание черновика + загрузка файлов в Minio.
-  // POST /api/services  (multipart: title, image, video)
+  // POST /api/titration_pairs/services  (multipart: title, image, video)
   // ==========================================================================
   async createDraft(dto: CreateServiceDto, imageFile?: Express.Multer.File, videoFile?: Express.Multer.File): Promise<ServiceDto> {
     const user = currentUser();
@@ -135,7 +135,7 @@ export class ApiService {
 
   // ==========================================================================
   // Домен "Услуга" — замена картинки услуги (старое изображение удаляется).
-  // POST /api/services/:id/image  (multipart: image) — приём по методичке MinIO
+  // POST /api/titration_pairs/services/:id/image  (multipart: image) — приём по методичке MinIO
   // ==========================================================================
   async uploadImage(id: number, file?: Express.Multer.File): Promise<ServiceDto> {
     const user = currentUser();
@@ -174,7 +174,7 @@ export class ApiService {
 
   // ==========================================================================
   // Домен "Услуга" — публикация (смена статуса draft -> published).
-  // PUT /api/services/:id/publish
+  // PUT /api/titration_pairs/services/:id/publish
   // ==========================================================================
   async publishDraft(id: number, dto: PublishServiceDto): Promise<ServiceDto> {
     const user = currentUser();
@@ -213,7 +213,7 @@ export class ApiService {
 
   // ==========================================================================
   // Домен "Услуга" — удаление (только soft delete: status = 'deleted').
-  // DELETE /api/services/:id
+  // DELETE /api/titration_pairs/services/:id
   // ==========================================================================
   async deleteService(id: number): Promise<{ id: number; status: string }> {
     const user = currentUser();
@@ -232,7 +232,7 @@ export class ApiService {
 
   // ==========================================================================
   // Домен "Услуга" — лайк от текущего пользователя.
-  // POST /api/services/:id/like  { value: 1 | 0 }
+  // POST /api/titration_pairs/services/:id/like  { value: 1 | 0 }
   // ==========================================================================
   async setLike(id: number, dto: LikeDto): Promise<{ liked: boolean; likes_count: number }> {
     const user = currentUser();
@@ -267,7 +267,7 @@ export class ApiService {
 
   // ==========================================================================
   // Домен "Пользователь" — регистрация.
-  // POST /api/users/register
+  // POST /api/titration_pairs/users/register
   // ==========================================================================
   async register(dto: RegisterUserDto): Promise<UserDto> {
     const safeName = (dto.username ?? '').trim();
@@ -287,7 +287,7 @@ export class ApiService {
 
   // ==========================================================================
   // Домен "Пользователь" — аутентификация (заглушка для 4-й лабораторной).
-  // POST /api/users/login
+  // POST /api/titration_pairs/users/login
   // ==========================================================================
   async login(body: any): Promise<{ message: string; stub: boolean }> {
     return { message: 'Заглушка аутентификации (лабораторная №4)', stub: true };
@@ -295,7 +295,7 @@ export class ApiService {
 
   // ==========================================================================
   // Домен "Пользователь" — деавторизация (заглушка для 4-й лабораторной).
-  // POST /api/users/logout
+  // POST /api/titration_pairs/users/logout
   // ==========================================================================
   async logout(): Promise<{ message: string; stub: boolean }> {
     return { message: 'Заглушка деавторизации (лабораторная №4)', stub: true };

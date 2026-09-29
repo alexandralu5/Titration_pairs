@@ -11,18 +11,18 @@ import { ServiceFiltersDto } from './dto/service-filters.dto';
 
 /**
  * REST-контроллер домена "Услуга".
- * Все методы начинаются с префикса /api.
+ * Все методы начинаются с префикса /api/titration_pairs.
  *
- * URL-дизайн:
- *  GET    /api/services            — список опубликованных (фильтр minConcentration)
- *  GET    /api/services/feed       — лента опубликованных
- *  GET    /api/services/feed/:id   — запись ленты (?next=true → следующая)
- *  GET    /api/services/draft      — черновик создателя (не более 1)
- *  POST   /api/services            — создать черновик (multipart: title, image, video)
- *  POST   /api/services/:id/image  — заменить изображение услуги (multipart: image)
- *  PUT    /api/services/:id/publish— опубликовать черновик (draft → published)
- *  DELETE /api/services/:id        — soft delete (status = 'deleted')
- *  POST   /api/services/:id/like   — { value: 1 } поставить / { value: 0 } снять
+ * URL-дизайн (базовый префикс: /api/titration_pairs):
+ *  GET    /api/titration_pairs/services           — список опубликованных (фильтр minConcentration)
+ *  GET    /api/titration_pairs/services/feed      — лента опубликованных
+ *  GET    /api/titration_pairs/services/feed/:id  — запись ленты (?next=true → следующая)
+ *  GET    /api/titration_pairs/services/draft     — черновик создателя (не более 1)
+ *  POST   /api/titration_pairs/services           — создать черновик (multipart: title, image, video)
+ *  POST   /api/titration_pairs/services/:id/image — заменить изображение услуги (multipart: image)
+ *  PUT    /api/titration_pairs/services/:id/publish — опубликовать черновик (draft → published)
+ *  DELETE /api/titration_pairs/services/:id       — soft delete (status = 'deleted')
+ *  POST   /api/titration_pairs/services/:id/like  — { value: 1 } поставить / { value: 0 } снять
  */
 
 // Допустимые типы файлов по расширению (приём по имени, т.к. curl/внешние клиенты
@@ -41,7 +41,7 @@ function mimeFilter(_req: any, file: Express.Multer.File, callback: (error: Erro
 
 const FILE_LIMITS = { fileSize: 10 * 1024 * 1024 }; // 10MB
 
-@Controller('api/services')
+@Controller('api/titration_pairs/services')
 export class ServicesController {
   constructor(private readonly apiService: ApiService) {}
 
@@ -122,11 +122,11 @@ export class ServicesController {
 
 /**
  * REST-контроллер домена "Пользователь".
- *  POST /api/users/register — регистрация { username }
- *  POST /api/users/login    — аутентификация (заглушка)
- *  POST /api/users/logout   — деавторизация (заглушка)
+ *  POST /api/titration_pairs/users/register — регистрация { username }
+ *  POST /api/titration_pairs/users/login    — аутентификация (заглушка)
+ *  POST /api/titration_pairs/users/logout   — деавторизация (заглушка)
  */
-@Controller('api/users')
+@Controller('api/titration_pairs/users')
 export class UsersController {
   constructor(private readonly apiService: ApiService) {}
 

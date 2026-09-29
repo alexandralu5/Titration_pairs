@@ -31,7 +31,7 @@ import { Like } from './titration/entities/like.entity';
         logging: config.get<string>('DB_LOGGING') === 'true',
       }),
     }),
-    // REST-веб-сервис /api для SPA (домены "Услуга" и "Пользователь")
+    // REST-веб-сервис /api/titration_pairs для SPA (домены "Услуга" и "Пользователь")
     ApiModule,
   ],
   controllers: [AppController],

@@ -7,7 +7,7 @@
 Приложение сделано на NestJS. Работает в двух режимах:
 
 - **SSR** — страницы на Handlebars (`/grid`, `/add`, `/feed`), SQL пишется напрямую через `pg`;
-- **REST API** — методы под `/api/*`, работа с БД через TypeORM.
+- **REST API** — методы под `/api/titration_pairs/*`, работа с БД через TypeORM.
 
 ## Запуск
 
@@ -51,35 +51,35 @@ MINIO_BUCKET=titration
 | `POST` | `/add/publish` | Опубликовать черновик → редирект на `/grid` |
 | `POST` | `/delete` | Удалить опыт (логически) → редирект на `/grid` |
 | `GET` | `/feed` или `/feed/:id` | Лента опубликованных опытов |
-| `GET` | `/api/services` | Список опубликованных. Фильтр `?minConcentration=` |
-| `GET` | `/api/services/feed` | Лента опубликованных |
-| `GET` | `/api/services/feed/:id` | Одна запись ленты, `?next=true` — следующая |
-| `GET` | `/api/services/draft` | Черновик текущего пользователя |
-| `POST` | `/api/services` | Создать черновик (multipart: `title`, `image`, `video`) |
-| `POST` | `/api/services/:id/image` | Заменить картинку (multipart: `image`) |
-| `PUT` | `/api/services/:id/publish` | Публикация: `draft` → `published` |
-| `DELETE` | `/api/services/:id` | Логическое удаление |
-| `POST` | `/api/services/:id/like` | Лайк `{"value":1}` или снятие `{"value":0}` |
-| `POST` | `/api/users/register` | Регистрация |
-| `POST` | `/api/users/login` | Вход — пока заглушка |
-| `POST` | `/api/users/logout` | Выход — пока заглушка |
+| `GET` | `/api/titration_pairs/services` | Список опубликованных. Фильтр `?minConcentration=` |
+| `GET` | `/api/titration_pairs/services/feed` | Лента опубликованных |
+| `GET` | `/api/titration_pairs/services/feed/:id` | Одна запись ленты, `?next=true` — следующая |
+| `GET` | `/api/titration_pairs/services/draft` | Черновик текущего пользователя |
+| `POST` | `/api/titration_pairs/services` | Создать черновик (multipart: `title`, `image`, `video`) |
+| `POST` | `/api/titration_pairs/services/:id/image` | Заменить картинку (multipart: `image`) |
+| `PUT` | `/api/titration_pairs/services/:id/publish` | Публикация: `draft` → `published` |
+| `DELETE` | `/api/titration_pairs/services/:id` | Логическое удаление |
+| `POST` | `/api/titration_pairs/services/:id/like` | Лайк `{"value":1}` или снятие `{"value":0}` |
+| `POST` | `/api/titration_pairs/users/register` | Регистрация |
+| `POST` | `/api/titration_pairs/users/login` | Вход — пока заглушка |
+| `POST` | `/api/titration_pairs/users/logout` | Выход — пока заглушка |
 
 ### REST API
 
-**`GET /api/services`** — отдаёт только опубликованные записи, сортировка по `id`.
+**`GET /api/titration_pairs/services`** — отдаёт только опубликованные записи, сортировка по `id`.
 Query-параметр `minConcentration` (число ≥ 0) — если задан, отбирает записи с `concentration >=` этого числа.
 
 ```bash
-curl "http://localhost:3000/api/services?minConcentration=0.1"
+curl "http://localhost:3000/api/titration_pairs/services?minConcentration=0.1"
 ```
 
-**`GET /api/services/feed`** — то же самое, но без фильтра.
+**`GET /api/titration_pairs/services/feed`** — то же самое, но без фильтра.
 
-**`GET /api/services/feed/:id`** — одна запись ленты. `:id` — число. Если добавить `?next=true`, вернётся следующая запись. Если следующей записи нет — `404`.
+**`GET /api/titration_pairs/services/feed/:id`** — одна запись ленты. `:id` — число. Если добавить `?next=true`, вернётся следующая запись. Если следующей записи нет — `404`.
 
-**`GET /api/services/draft`** — черновик того, кто сейчас «залогинен» (см. `currentUser()`). Если черновика нет — `404`.
+**`GET /api/titration_pairs/services/draft`** — черновик того, кто сейчас «залогинен» (см. `currentUser()`). Если черновика нет — `404`.
 
-**`POST /api/services`** — создаёт черновик. Тело — `multipart/form-data`:
+**`POST /api/titration_pairs/services`** — создаёт черновик. Тело — `multipart/form-data`:
 
 | Поле | Обязательно | Ограничения |
 |------|-------------|-------------|
@@ -90,12 +90,12 @@ curl "http://localhost:3000/api/services?minConcentration=0.1"
 Ответ `201`. В БД сразу ставится `status = 'draft'`, а в `image_url` / `video_url` кладётся только имя файла из MinIO.
 
 ```bash
-curl -X POST http://localhost:3000/api/services -F "title=Опыт №1" -F "image=@photo.jpg"
+curl -X POST http://localhost:3000/api/titration_pairs/services -F "title=Опыт №1" -F "image=@photo.jpg"
 ```
 
-**`POST /api/services/:id/image`** — заменяет картинку. Старый файл при этом удаляется из MinIO. Менять может только автор опыта, иначе `403`.
+**`POST /api/titration_pairs/services/:id/image`** — заменяет картинку. Старый файл при этом удаляется из MinIO. Менять может только автор опыта, иначе `403`.
 
-**`PUT /api/services/:id/publish`** — публикует черновик. Тело — JSON:
+**`PUT /api/titration_pairs/services/:id/publish`** — публикует черновик. Тело — JSON:
 
 | Поле | Обязательно | Ограничения |
 |------|-------------|-------------|
@@ -105,13 +105,13 @@ curl -X POST http://localhost:3000/api/services -F "title=Опыт №1" -F "ima
 
 Сервер сам ставит `status = 'published'`, `formed_at = NOW()` и `moderator_id`. Эти поля из запроса принять нельзя — вернуться из `published` в `draft` нельзя, попытка даёт `400`.
 
-**`DELETE /api/services/:id`** — запись физически остаётся в БД, но получает `status = 'deleted'` и пропадает из всех списков. Ответ: `{"id": 1, "status": "deleted"}`.
+**`DELETE /api/titration_pairs/services/:id`** — запись физически остаётся в БД, но получает `status = 'deleted'` и пропадает из всех списков. Ответ: `{"id": 1, "status": "deleted"}`.
 
-**`POST /api/services/:id/like`** — тело `{"value": 1}` поставить лайк, `{"value": 0}` снять. Значение может быть только 0 или 1, иначе `400`. Повторный лайк не создаёт дубль — за это отвечает уникальный индекс в БД. Ответ: `{"liked": true, "likes_count": 4}`.
+**`POST /api/titration_pairs/services/:id/like`** — тело `{"value": 1}` поставить лайк, `{"value": 0}` снять. Значение может быть только 0 или 1, иначе `400`. Повторный лайк не создаёт дубль — за это отвечает уникальный индекс в БД. Ответ: `{"liked": true, "likes_count": 4}`.
 
-**`POST /api/users/register`** — тело `{"username": "ivanov"}`. Имя должно быть непустым и уникальным, иначе `400` или `409`.
+**`POST /api/titration_pairs/users/register`** — тело `{"username": "ivanov"}`. Имя должно быть непустым и уникальным, иначе `400` или `409`.
 
-**`POST /api/users/login`** и **`POST /api/users/logout`** — заглушки под лабораторную №4, всегда возвращают `{"message": "...", "stub": true}`.
+**`POST /api/titration_pairs/users/login`** и **`POST /api/titration_pairs/users/logout`** — заглушки под лабораторную №4, всегда возвращают `{"message": "...", "stub": true}`.
 
 ### SSR-маршруты
 

@@ -32,7 +32,7 @@ async function bootstrap() {
   // Автоматически скрывает поля сущностей с @Exclude() (например, системные)
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
 
-  // CORS для SPA (фронтенд будет обращаться к /api)
+  // CORS для SPA (фронтенд будет обращаться к /api/titration_pairs)
   app.enableCors();
 
   await app.listen(3000);
