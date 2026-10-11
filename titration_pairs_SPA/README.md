@@ -43,6 +43,17 @@ MINIO_BUCKET=titration
 
 Всего 18 маршрутов: 6 SSR и 12 REST.
 
+### Правила URL (требования методички)
+
+- в URL только **существительные во множественном числе**, глаголов нет;
+- **действие задаёт HTTP-метод**: `GET` — прочитать, `POST` — создать, `PUT` — изменить, `DELETE` — удалить;
+- **идентификатор объекта — в пути** (`:id`);
+- **фильтры и условия выборки — в строке запроса** (`?minConcentration=`, `?next=`).
+
+Поэтому в URL нет `register`, `login`, `logout`, `publish`: регистрация — это
+`POST /users`, вход — `POST /sessions`, выход — `DELETE /sessions`, публикация —
+`PUT /services/:id`. Замена картинки идемпотентна, поэтому это `PUT`, а не `POST`.
+
 | Метод | URL | Что делает |
 |-------|-----|------------|
 | `GET` | `/grid` | Сетка опытов. Фильтр `?concentration=` |
@@ -56,13 +67,49 @@ MINIO_BUCKET=titration
 | `GET` | `/api/titration_pairs/services/feed/:id` | Одна запись ленты, `?next=true` — следующая |
 | `GET` | `/api/titration_pairs/services/draft` | Черновик текущего пользователя |
 | `POST` | `/api/titration_pairs/services` | Создать черновик (multipart: `title`, `image`, `video`) |
-| `POST` | `/api/titration_pairs/services/:id/image` | Заменить картинку (multipart: `image`) |
-| `PUT` | `/api/titration_pairs/services/:id/publish` | Публикация: `draft` → `published` |
+| `PUT` | `/api/titration_pairs/services/:id/image` | Заменить картинку (multipart: `image`) |
+| `PUT` | `/api/titration_pairs/services/:id` | Обновить услугу: публикация `draft` → `published` |
 | `DELETE` | `/api/titration_pairs/services/:id` | Логическое удаление |
 | `POST` | `/api/titration_pairs/services/:id/like` | Лайк `{"value":1}` или снятие `{"value":0}` |
-| `POST` | `/api/titration_pairs/users/register` | Регистрация |
-| `POST` | `/api/titration_pairs/users/login` | Вход — пока заглушка |
-| `POST` | `/api/titration_pairs/users/logout` | Выход — пока заглушка |
+| `POST` | `/api/titration_pairs/users` | Регистрация |
+| `POST` | `/api/titration_pairs/sessions` | Вход — пока заглушка |
+| `DELETE` | `/api/titration_pairs/sessions` | Выход — пока заглушка |
+
+
+### Формат ответа
+
+Объект услуги всегда возвращается с **одинаковым набором полей** — пустое значение
+отдаётся как `null` (или `''` для строк), но ключ присутствует всегда:
+
+```json
+{
+  "id": 1,
+  "title": "Опыт №1",
+  "description": null,
+  "ph": 7,
+  "concentration": null,
+  "image_url": "http://localhost:9000/titration/photo.jpg",
+  "video_url": "",
+  "likes_count": 0,
+  "created_at": "2026-09-30T10:00:00.000Z",
+  "formed_at": null
+}
+```
+
+`status` в ответе **не участвует**: статус хранится только в БД и используется для
+фильтрации ленты и логического удаления.
+
+Тело любой ошибки пустое — `{}`. Ни `statusCode`, ни `error`, ни `message` в JSON
+не отдаются, ошибка определяется только по HTTP-коду ответа:
+
+| HTTP-код | Когда |
+|----------|-------|
+| `200` | Успешный GET, замена картинки (PUT), обновление услуги (PUT), DELETE, выход |
+| `201` | Создание услуги (POST), лайк (POST), регистрация (POST), вход (POST) |
+| `400` | Невалидные данные или лишние поля в запросе |
+| `403` | Действие разрешено только автору / модератору |
+| `404` | Записи нет, черновика нет, следующей записи в ленте нет |
+| `409` | Логин уже занят |
 
 ### REST API
 
@@ -93,9 +140,9 @@ curl "http://localhost:3000/api/titration_pairs/services?minConcentration=0.1"
 curl -X POST http://localhost:3000/api/titration_pairs/services -F "title=Опыт №1" -F "image=@photo.jpg"
 ```
 
-**`POST /api/titration_pairs/services/:id/image`** — заменяет картинку. Старый файл при этом удаляется из MinIO. Менять может только автор опыта, иначе `403`.
+**`PUT /api/titration_pairs/services/:id/image`** — заменяет картинку. Операция идемпотентная, поэтому метод `PUT`, а не `POST`: повторный вызов заменяет ресурс, а не создаёт новый. Старый файл при этом удаляется из MinIO. Менять может только автор опыта, иначе `403`.
 
-**`PUT /api/titration_pairs/services/:id/publish`** — публикует черновик. Тело — JSON:
+**`PUT /api/titration_pairs/services/:id`** — обновляет услугу; в нашем домене обновление черновика одновременно его публикует. Тело — JSON:
 
 | Поле | Обязательно | Ограничения |
 |------|-------------|-------------|
@@ -105,13 +152,13 @@ curl -X POST http://localhost:3000/api/titration_pairs/services -F "title=Опы
 
 Сервер сам ставит `status = 'published'`, `formed_at = NOW()` и `moderator_id`. Эти поля из запроса принять нельзя — вернуться из `published` в `draft` нельзя, попытка даёт `400`.
 
-**`DELETE /api/titration_pairs/services/:id`** — запись физически остаётся в БД, но получает `status = 'deleted'` и пропадает из всех списков. Ответ: `{"id": 1, "status": "deleted"}`.
+**`DELETE /api/titration_pairs/services/:id`** — запись физически остаётся в БД, но получает `status = 'deleted'` и пропадает из всех списков. Ответ: `{"id": 1}`.
 
 **`POST /api/titration_pairs/services/:id/like`** — тело `{"value": 1}` поставить лайк, `{"value": 0}` снять. Значение может быть только 0 или 1, иначе `400`. Повторный лайк не создаёт дубль — за это отвечает уникальный индекс в БД. Ответ: `{"liked": true, "likes_count": 4}`.
 
-**`POST /api/titration_pairs/users/register`** — тело `{"username": "ivanov"}`. Имя должно быть непустым и уникальным, иначе `400` или `409`.
+**`POST /api/titration_pairs/users`** — регистрация, тело `{"username": "ivanov"}`. Имя должно быть непустым и уникальным, иначе `400` или `409`. Ответ `201`.
 
-**`POST /api/titration_pairs/users/login`** и **`POST /api/titration_pairs/users/logout`** — заглушки под лабораторную №4, всегда возвращают `{"message": "...", "stub": true}`.
+**`POST /api/titration_pairs/sessions`** (вход) и **`DELETE /api/titration_pairs/sessions`** (выход) — заглушки под лабораторную №4, всегда возвращают `{"message": "...", "stub": true}`. Сессия — отдельный ресурс, поэтому вход это `POST`, а выход — `DELETE`; глаголов `login` / `logout` в URL нет.
 
 ### SSR-маршруты
 

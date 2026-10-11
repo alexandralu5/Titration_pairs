@@ -5,6 +5,6 @@ import { IsIn, IsNumber } from 'class-validator';
 export class LikeDto {
   @Type(() => Number)
   @IsNumber()
-  @IsIn([0, 1], { message: 'Поле value может быть только 1 (поставить) или 0 (снять)' })
+  @IsIn([0, 1])
   value: number;
 }

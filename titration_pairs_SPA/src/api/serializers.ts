@@ -8,8 +8,17 @@
  *
  * Сериализатор преобразует модель в безопасный для клиента объект:
  *  - оставляет только разрешённые поля;
+ *  - НЕ отдаёт status: статус нужен только в БД, в интерфейсе
+ *    это разные окна и выводить его некуда;
+ *  - НЕ дублирует код состояния HTTP в теле ответа: код ответа
+ *    задаётся отдельно (@HttpCode) и в JSON не попадает;
  *  - отдаёт публичный URL файла из Minio (в БД хранится только имя файла);
  *  - добавляет количество лайков.
+ *
+ * Инвариант: набор ключей ServiceDto ОДИНАКОВ для всех ответов.
+ * Пустое значение отдаётся как null (или '' для строк), но ключ
+ * присутствует всегда — GET черновика и GET ленты возвращают
+ * одинаковый набор полей.
  */
 
 import { bucketName } from './minio.provider';
@@ -21,11 +30,11 @@ export function fileUrl(value: string | null | undefined): string {
   return `http://localhost:9000/${bucketName()}/${value}`;
 }
 
+/** Контракт ответа. Набор полей ОДИНАКОВ для всех методов домена. */
 export interface ServiceDto {
   id: number;
   title: string;
   description: string | null;
-  status: 'draft' | 'published' | 'deleted';
   ph: number | null;
   concentration: number | null;
   image_url: string;
@@ -40,7 +49,6 @@ export function serializeService(row: any, likesCount: number): ServiceDto {
     id: Number(row.id),
     title: row.title ?? '',
     description: row.description ?? null,
-    status: row.status,
     ph: row.ph != null ? Number(row.ph) : null,
     concentration: row.concentration != null ? Number(row.concentration) : null,
     image_url: fileUrl(row.image_url),

@@ -4,6 +4,7 @@ import { Reflector } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
+import { HttpExceptionFilter } from './api/http-exception.filter';
 
 // Прямой require обходит проблемы с совместимостью типом импорта hbs
 const hbs = require('hbs');
@@ -31,6 +32,10 @@ async function bootstrap() {
 
   // Автоматически скрывает поля сущностей с @Exclude() (например, системные)
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
+
+  // Тело любой ошибки пустое ({}), статус ошибки клиент берёт из HTTP-кода:
+  // ни statusCode, ни error, ни message в JSON не отдаём.
+  app.useGlobalFilters(new HttpExceptionFilter());
 
   // CORS для SPA (фронтенд будет обращаться к /api/titration_pairs)
   app.enableCors();

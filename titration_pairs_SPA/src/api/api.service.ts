@@ -9,21 +9,33 @@ import { currentUser } from './current-user';
 import { serializeService, serializeUser, ServiceDto, UserDto } from './serializers';
 import { bucketName, MINIO_CLIENT } from './minio.provider';
 import { CreateServiceDto } from './dto/create-service.dto';
-import { PublishServiceDto } from './dto/publish-service.dto';
+import { UpdateServiceDto } from './dto/update-service.dto';
 import { LikeDto } from './dto/like.dto';
 import { RegisterUserDto } from './dto/register-user.dto';
 
 /**
- * Домен "Услуга/опыт" + "Пользователь".
+ * Домен "Услуга/опыт" + "Пользователь" + "Сессия".
+ *
+ * URL-дизайн: только существительные во множественном числе, глаголов нет;
+ * действие задаёт HTTP-метод, id — в пути, фильтры — в строке запроса.
  *
  * Бизнес-логика:
  *  - записи со статусом 'deleted' клиенту НЕ возвращаются;
  *  - статусы нельзя менять "с любого на любой": только создатель через
- *    два метода (POST create → draft, PUT publish → published), вернуться
+ *    два метода (POST create → draft, PUT update → published), вернуться
  *    в черновик нельзя;
  *  - системные поля (id, status, creator, moderator, даты) не принимаются
  *    от клиента — вычисляются на бэкенде;
  *  - текущий пользователь (создатель) задан константой через currentUser().
+ *
+ * Формат ответов:
+ *  - код состояния отдаётся отдельным параметром ответа (@HttpCode),
+ *    в тело JSON он НЕ дублируется;
+ *  - status в ответе не отдаётся — он нужен только в БД;
+ *  - исключения выбрасываются без текстов, только со стандартным кодом
+ *    (404 — не найдено, 403 — чужой объект, 400 — некорректный ввод,
+ *    409 — конфликт);
+ *  - набор полей ServiceDto всегда одинаковый, пустые значения — null.
  */
 @Injectable()
 export class ApiService {
@@ -70,11 +82,11 @@ export class ApiService {
     const items = await this.feed();
     const idx = items.findIndex((i) => i.id === id);
     if (idx === -1) {
-      throw new NotFoundException(`Услуга с id=${id} не найдена или удалена`);
+      throw new NotFoundException();
     }
     const target = next ? items[idx + 1] : items[idx];
     if (!target) {
-      throw new NotFoundException('Дальше в ленте записей нет');
+      throw new NotFoundException();
     }
     return target;
   }
@@ -93,7 +105,7 @@ export class ApiService {
     });
 
     if (!draft) {
-      throw new NotFoundException('Черновик не найден');
+      throw new NotFoundException();
     }
 
     const likesCount = await this.likesRepo.count({
@@ -112,7 +124,7 @@ export class ApiService {
 
     const safeTitle = (dto.title ?? '').trim();
     if (!safeTitle) {
-      throw new BadRequestException('Название услуги обязательно');
+      throw new BadRequestException();
     }
 
     // Названия файлов генерируются на латинице, сами файлы — в Minio,
@@ -135,23 +147,23 @@ export class ApiService {
 
   // ==========================================================================
   // Домен "Услуга" — замена картинки услуги (старое изображение удаляется).
-  // POST /api/titration_pairs/services/:id/image  (multipart: image) — приём по методичке MinIO
+  // PUT /api/titration_pairs/services/:id/image  (multipart: image) — приём по методичке MinIO
   // ==========================================================================
   async uploadImage(id: number, file?: Express.Multer.File): Promise<ServiceDto> {
     const user = currentUser();
 
     const item = await this.titrationsRepo.findOne({ where: { id }, relations: { creator: true } });
     if (!item || item.status === 'deleted') {
-      throw new NotFoundException(`Услуга с id=${id} не найдена или удалена`);
+      throw new NotFoundException();
     }
     if (item.creator?.id !== user.id) {
-      throw new ForbiddenException('Менять файлы может только создатель');
+      throw new ForbiddenException();
     }
     if (!file) {
-      throw new BadRequestException('Файл изображения не предоставлен');
+      throw new BadRequestException();
     }
     if (!file.mimetype.startsWith('image/')) {
-      throw new BadRequestException('Файл должен быть изображением');
+      throw new BadRequestException();
     }
 
     // Старое изображение удаляется из MinIO
@@ -173,10 +185,11 @@ export class ApiService {
   }
 
   // ==========================================================================
-  // Домен "Услуга" — публикация (смена статуса draft -> published).
-  // PUT /api/titration_pairs/services/:id/publish
+  // Домен "Услуга" — обновление услуги; для черновика это одновременно
+  // публикация (смена статуса draft -> published).
+  // PUT /api/titration_pairs/services/:id
   // ==========================================================================
-  async publishDraft(id: number, dto: PublishServiceDto): Promise<ServiceDto> {
+  async updateService(id: number, dto: UpdateServiceDto): Promise<ServiceDto> {
     const user = currentUser();
 
     const draft = await this.titrationsRepo.findOne({
@@ -185,13 +198,13 @@ export class ApiService {
     });
 
     if (!draft || draft.status === 'deleted') {
-      throw new NotFoundException(`Услуга с id=${id} не найдена или удалена`);
+      throw new NotFoundException();
     }
     if (draft.creator?.id !== user.id) {
-      throw new ForbiddenException('Публиковать может только создатель');
+      throw new ForbiddenException();
     }
     if (draft.status !== 'draft') {
-      throw new BadRequestException('Опубликовать можно только черновик (вернуться в черновик нельзя)');
+      throw new BadRequestException();
     }
 
     const update: any = {
@@ -215,19 +228,19 @@ export class ApiService {
   // Домен "Услуга" — удаление (только soft delete: status = 'deleted').
   // DELETE /api/titration_pairs/services/:id
   // ==========================================================================
-  async deleteService(id: number): Promise<{ id: number; status: string }> {
+  async deleteService(id: number): Promise<{ id: number }> {
     const user = currentUser();
 
     const item = await this.titrationsRepo.findOne({ where: { id }, relations: { creator: true } });
     if (!item || item.status === 'deleted') {
-      throw new NotFoundException(`Услуга с id=${id} не найдена или уже удалена`);
+      throw new NotFoundException();
     }
     if (item.creator?.id !== user.id) {
-      throw new ForbiddenException('Удалять может только создатель');
+      throw new ForbiddenException();
     }
 
     await this.titrationsRepo.update(id, { status: 'deleted' });
-    return { id, status: 'deleted' };
+    return { id };
   }
 
   // ==========================================================================
@@ -240,7 +253,7 @@ export class ApiService {
 
     const item = await this.titrationsRepo.findOne({ where: { id } });
     if (!item || item.status === 'deleted') {
-      throw new NotFoundException(`Услуга с id=${id} не найдена или удалена`);
+      throw new NotFoundException();
     }
 
     const existing = await this.likesRepo.findOne({
@@ -267,17 +280,17 @@ export class ApiService {
 
   // ==========================================================================
   // Домен "Пользователь" — регистрация.
-  // POST /api/titration_pairs/users/register
+  // POST /api/titration_pairs/users
   // ==========================================================================
   async register(dto: RegisterUserDto): Promise<UserDto> {
     const safeName = (dto.username ?? '').trim();
     if (!safeName) {
-      throw new BadRequestException('Имя пользователя обязательно');
+      throw new BadRequestException();
     }
 
     const exists = await this.usersRepo.findOne({ where: { username: safeName } });
     if (exists) {
-      throw new ConflictException(`Пользователь "${safeName}" уже зарегистрирован`);
+      throw new ConflictException();
     }
 
     const user = this.usersRepo.create({ username: safeName });
@@ -286,16 +299,16 @@ export class ApiService {
   }
 
   // ==========================================================================
-  // Домен "Пользователь" — аутентификация (заглушка для 4-й лабораторной).
-  // POST /api/titration_pairs/users/login
+  // Домен "Сессия" — аутентификация (заглушка для 4-й лабораторной).
+  // POST /api/titration_pairs/sessions
   // ==========================================================================
   async login(body: any): Promise<{ message: string; stub: boolean }> {
     return { message: 'Заглушка аутентификации (лабораторная №4)', stub: true };
   }
 
   // ==========================================================================
-  // Домен "Пользователь" — деавторизация (заглушка для 4-й лабораторной).
-  // POST /api/titration_pairs/users/logout
+  // Домен "Сессия" — деавторизация (заглушка для 4-й лабораторной).
+  // DELETE /api/titration_pairs/sessions
   // ==========================================================================
   async logout(): Promise<{ message: string; stub: boolean }> {
     return { message: 'Заглушка деавторизации (лабораторная №4)', stub: true };

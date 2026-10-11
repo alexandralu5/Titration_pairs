@@ -74,7 +74,7 @@ export class AppController {
     const data = await this.appService.getFeedData(id);
 
     if (!data) {
-      throw new NotFoundException('Опыт с данным ID не найден или был удален');
+      throw new NotFoundException();
     }
 
     return data;
