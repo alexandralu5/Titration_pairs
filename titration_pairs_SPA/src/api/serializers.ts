@@ -15,10 +15,15 @@
  *  - отдаёт публичный URL файла из Minio (в БД хранится только имя файла);
  *  - добавляет количество лайков.
  *
- * Инвариант: набор ключей ServiceDto ОДИНАКОВ для всех ответов.
+ * Инвариант: базовый набор ключей ServiceDto ОДИНАКОВ для всех ответов.
  * Пустое значение отдаётся как null (или '' для строк), но ключ
- * присутствует всегда — GET черновика и GET ленты возвращают
- * одинаковый набор полей.
+ * присутствует всегда.
+ *
+ * Два метода добавляют к базовому набору по одному признаку (1 или 0)
+ * относительно текущего пользователя:
+ *  - GET ленты   -> is_liked: пользователь лайкнул эту услугу;
+ *  - GET списка  -> is_mine: пользователь — создатель услуги.
+ * В остальных ответах этих признаков нет.
  */
 
 import { bucketName } from './minio.provider';
@@ -30,7 +35,7 @@ export function fileUrl(value: string | null | undefined): string {
   return `http://localhost:9000/${bucketName()}/${value}`;
 }
 
-/** Контракт ответа. Набор полей ОДИНАКОВ для всех методов домена. */
+/** Базовый контракт ответа. Этот набор полей есть во всех методах домена. */
 export interface ServiceDto {
   id: number;
   title: string;
@@ -42,6 +47,16 @@ export interface ServiceDto {
   likes_count: number;
   created_at: Date | null;
   formed_at: Date | null;
+}
+
+/** Запись ленты: базовые поля + признак "текущий пользователь лайкнул". */
+export interface FeedServiceDto extends ServiceDto {
+  is_liked: 0 | 1;
+}
+
+/** Карточка списка (плитки): базовые поля + признак "текущий пользователь — создатель". */
+export interface ListServiceDto extends ServiceDto {
+  is_mine: 0 | 1;
 }
 
 export function serializeService(row: any, likesCount: number): ServiceDto {
@@ -57,6 +72,14 @@ export function serializeService(row: any, likesCount: number): ServiceDto {
     created_at: row.created_at ?? null,
     formed_at: row.formed_at ?? null,
   };
+}
+
+export function serializeFeedService(row: any, likesCount: number, isLiked: boolean): FeedServiceDto {
+  return { ...serializeService(row, likesCount), is_liked: isLiked ? 1 : 0 };
+}
+
+export function serializeListService(row: any, likesCount: number, isMine: boolean): ListServiceDto {
+  return { ...serializeService(row, likesCount), is_mine: isMine ? 1 : 0 };
 }
 
 export interface UserDto {

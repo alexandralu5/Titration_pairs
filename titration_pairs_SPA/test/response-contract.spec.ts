@@ -1,7 +1,7 @@
 import { ArgumentsHost, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { HttpExceptionFilter } from '../src/api/http-exception.filter';
-import { serializeService } from '../src/api/serializers';
+import { serializeFeedService, serializeListService, serializeService } from '../src/api/serializers';
 
 const SERVICE_KEYS = [
   'concentration',
@@ -55,6 +55,31 @@ describe('Контракт ответа услуги', () => {
     expect(Object.keys(dto).sort()).toEqual(SERVICE_KEYS);
     expect(dto.ph).toBe(7);
     expect(dto.likes_count).toBe(3);
+  });
+
+  it('в базовом ответе (черновик, создание, публикация) нет is_liked и is_mine', () => {
+    const dto = serializeService({ id: 1 }, 0);
+
+    expect(dto).not.toHaveProperty('is_liked');
+    expect(dto).not.toHaveProperty('is_mine');
+  });
+
+  it('лента: базовые поля + is_liked (1/0), без is_mine', () => {
+    const liked = serializeFeedService({ id: 1 }, 2, true);
+    const notLiked = serializeFeedService({ id: 1 }, 0, false);
+
+    expect(Object.keys(liked).sort()).toEqual([...SERVICE_KEYS, 'is_liked'].sort());
+    expect(liked.is_liked).toBe(1);
+    expect(notLiked.is_liked).toBe(0);
+  });
+
+  it('список: базовые поля + is_mine (1/0), без is_liked', () => {
+    const mine = serializeListService({ id: 1 }, 2, true);
+    const notMine = serializeListService({ id: 1 }, 0, false);
+
+    expect(Object.keys(mine).sort()).toEqual([...SERVICE_KEYS, 'is_mine'].sort());
+    expect(mine.is_mine).toBe(1);
+    expect(notMine.is_mine).toBe(0);
   });
 
   it('не отдаёт status в JSON', () => {

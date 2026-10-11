@@ -78,8 +78,30 @@
         <button type="submit" class="button_primary">Опубликовать</button>
       </form>
     {{else}}
-      <!-- Шаг 1: только поле ввода названия -->
+      <!-- Шаг 1: фото и видео — только заглушки (выбрать свои файлы можно
+           на шаге 2, после кнопки "Далее"), под ними поле ввода названия -->
       <form action="/add" method="POST" class="add-card">
+        <div class="form-group">
+          <label>Фото</label>
+          <img
+            class="media-preview-img media-preview-static"
+            src="/img/default-image.jpg"
+            alt="Фото опыта"
+          >
+        </div>
+
+        <div class="form-group">
+          <label>Видео</label>
+          <video
+            class="media-preview-video media-preview-static"
+            src="/img/default-video.mp4"
+            autoplay
+            loop
+            muted
+            playsinline
+          ></video>
+        </div>
+
         <div class="form-group">
           <label>Название опыта</label>
           <input type="text" name="title" placeholder="Например: HCl + NaOH" required>

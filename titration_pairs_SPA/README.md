@@ -45,14 +45,15 @@ MINIO_BUCKET=titration
 
 ### Правила URL (требования методички)
 
-- в URL только **существительные во множественном числе**, глаголов нет;
+- ресурс назван **существительным во множественном числе**: услуги лежат прямо под `/api/titration_pairs`, пользователи — под `/api/titration_pairs/users`;
 - **действие задаёт HTTP-метод**: `GET` — прочитать, `POST` — создать, `PUT` — изменить, `DELETE` — удалить;
 - **идентификатор объекта — в пути** (`:id`);
 - **фильтры и условия выборки — в строке запроса** (`?minConcentration=`, `?next=`).
 
-Поэтому в URL нет `register`, `login`, `logout`, `publish`: регистрация — это
-`POST /users`, вход — `POST /sessions`, выход — `DELETE /sessions`, публикация —
-`PUT /services/:id`. Замена картинки идемпотентна, поэтому это `PUT`, а не `POST`.
+Поэтому в URL нет `register` и `publish`: регистрация — это `POST /users`,
+публикация — `PUT /:id`. Замена картинки идемпотентна, поэтому это `PUT`, а не `POST`.
+Вход и выход по заданию оба делаются методом `POST`, поэтому различаются адресом:
+`POST /users/login` и `POST /users/logout`.
 
 | Метод | URL | Что делает |
 |-------|-----|------------|
@@ -62,23 +63,23 @@ MINIO_BUCKET=titration
 | `POST` | `/add/publish` | Опубликовать черновик → редирект на `/grid` |
 | `POST` | `/delete` | Удалить опыт (логически) → редирект на `/grid` |
 | `GET` | `/feed` или `/feed/:id` | Лента опубликованных опытов |
-| `GET` | `/api/titration_pairs/services` | Список опубликованных. Фильтр `?minConcentration=` |
-| `GET` | `/api/titration_pairs/services/feed` | Лента опубликованных |
-| `GET` | `/api/titration_pairs/services/feed/:id` | Одна запись ленты, `?next=true` — следующая |
-| `GET` | `/api/titration_pairs/services/draft` | Черновик текущего пользователя |
-| `POST` | `/api/titration_pairs/services` | Создать черновик (multipart: `title`, `image`, `video`) |
-| `PUT` | `/api/titration_pairs/services/:id/image` | Заменить картинку (multipart: `image`) |
-| `PUT` | `/api/titration_pairs/services/:id` | Обновить услугу: публикация `draft` → `published` |
-| `DELETE` | `/api/titration_pairs/services/:id` | Логическое удаление |
-| `POST` | `/api/titration_pairs/services/:id/like` | Лайк `{"value":1}` или снятие `{"value":0}` |
+| `GET` | `/api/titration_pairs` | Список опубликованных. Фильтр `?minConcentration=`. Признак `is_mine` (1/0) |
+| `GET` | `/api/titration_pairs/feed` | Лента: одна запись — первая опубликованная. Признак `is_liked` (1/0) |
+| `GET` | `/api/titration_pairs/feed/:id` | Одна запись ленты, `?next=true` — следующая |
+| `GET` | `/api/titration_pairs/draft` | Черновик текущего пользователя |
+| `POST` | `/api/titration_pairs` | Создать черновик (multipart: `title`, `image`, `video`) |
+| `PUT` | `/api/titration_pairs/:id/image` | Заменить картинку (multipart: `image`) |
+| `PUT` | `/api/titration_pairs/:id` | Обновить услугу: публикация `draft` → `published` |
+| `DELETE` | `/api/titration_pairs/:id` | Логическое удаление |
+| `POST` | `/api/titration_pairs/:id/like` | Лайк `{"value":1}` или снятие `{"value":0}` |
 | `POST` | `/api/titration_pairs/users` | Регистрация |
-| `POST` | `/api/titration_pairs/sessions` | Вход — пока заглушка |
-| `DELETE` | `/api/titration_pairs/sessions` | Выход — пока заглушка |
+| `POST` | `/api/titration_pairs/users/login` | Аутентификация — пока заглушка |
+| `POST` | `/api/titration_pairs/users/logout` | Деавторизация — пока заглушка |
 
 
 ### Формат ответа
 
-Объект услуги всегда возвращается с **одинаковым набором полей** — пустое значение
+Объект услуги всегда содержит **одинаковый базовый набор полей** — пустое значение
 отдаётся как `null` (или `''` для строк), но ключ присутствует всегда:
 
 ```json
@@ -96,6 +97,15 @@ MINIO_BUCKET=titration
 }
 ```
 
+Два метода добавляют к базовому набору по одному признаку. Оба считаются относительно текущего пользователя (`currentUser()`) и отдаются числом `1` или `0`, а не `true`/`false`:
+
+| Признак | Где отдаётся | Значение |
+|---------|--------------|----------|
+| `is_liked` | только лента: `GET /feed` и `GET /feed/:id` | `1`, если текущий пользователь поставил лайк этой услуге |
+| `is_mine` | только список (плитка): `GET /api/titration_pairs` | `1`, если текущий пользователь — создатель услуги |
+
+В остальных ответах (черновик, создание, замена картинки, публикация) этих признаков нет.
+
 `status` в ответе **не участвует**: статус хранится только в БД и используется для
 фильтрации ленты и логического удаления.
 
@@ -104,29 +114,30 @@ MINIO_BUCKET=titration
 
 | HTTP-код | Когда |
 |----------|-------|
-| `200` | Успешный GET, замена картинки (PUT), обновление услуги (PUT), DELETE, выход |
-| `201` | Создание услуги (POST), лайк (POST), регистрация (POST), вход (POST) |
+| `200` | Успешный GET, замена картинки (PUT), обновление услуги (PUT), DELETE, вход и выход (POST) |
+| `201` | Создание услуги (POST), лайк (POST), регистрация (POST) |
 | `400` | Невалидные данные или лишние поля в запросе |
 | `403` | Действие разрешено только автору / модератору |
-| `404` | Записи нет, черновика нет, следующей записи в ленте нет |
+| `404` | Записи нет, черновика нет, лента пуста, следующей записи в ленте нет |
 | `409` | Логин уже занят |
 
 ### REST API
 
-**`GET /api/titration_pairs/services`** — отдаёт только опубликованные записи, сортировка по `id`.
+**`GET /api/titration_pairs`** — отдаёт массив только опубликованных записей, сортировка по `id`.
 Query-параметр `minConcentration` (число ≥ 0) — если задан, отбирает записи с `concentration >=` этого числа.
+У каждой записи есть `is_mine` — `1`, если создатель совпадает с текущим пользователем, иначе `0`.
 
 ```bash
-curl "http://localhost:3000/api/titration_pairs/services?minConcentration=0.1"
+curl "http://localhost:3000/api/titration_pairs?minConcentration=0.1"
 ```
 
-**`GET /api/titration_pairs/services/feed`** — то же самое, но без фильтра.
+**`GET /api/titration_pairs/feed`** — лента без ид: возвращает **одну** запись (объект, а не массив) — первую опубликованную по `id`. В записи есть `is_liked` — лайкнул ли её текущий пользователь. Если опубликованных записей нет — `404`.
 
-**`GET /api/titration_pairs/services/feed/:id`** — одна запись ленты. `:id` — число. Если добавить `?next=true`, вернётся следующая запись. Если следующей записи нет — `404`.
+**`GET /api/titration_pairs/feed/:id`** — одна запись ленты по ид. `:id` — число. Если добавить `?next=true`, вернётся следующая за ней опубликованная запись. Если следующей записи нет — `404`.
 
-**`GET /api/titration_pairs/services/draft`** — черновик того, кто сейчас «залогинен» (см. `currentUser()`). Если черновика нет — `404`.
+**`GET /api/titration_pairs/draft`** — черновик того, кто сейчас «залогинен» (см. `currentUser()`). Если черновика нет — `404`.
 
-**`POST /api/titration_pairs/services`** — создаёт черновик. Тело — `multipart/form-data`:
+**`POST /api/titration_pairs`** — создаёт черновик. Тело — `multipart/form-data`:
 
 | Поле | Обязательно | Ограничения |
 |------|-------------|-------------|
@@ -137,12 +148,12 @@ curl "http://localhost:3000/api/titration_pairs/services?minConcentration=0.1"
 Ответ `201`. В БД сразу ставится `status = 'draft'`, а в `image_url` / `video_url` кладётся только имя файла из MinIO.
 
 ```bash
-curl -X POST http://localhost:3000/api/titration_pairs/services -F "title=Опыт №1" -F "image=@photo.jpg"
+curl -X POST http://localhost:3000/api/titration_pairs -F "title=Опыт №1" -F "image=@photo.jpg"
 ```
 
-**`PUT /api/titration_pairs/services/:id/image`** — заменяет картинку. Операция идемпотентная, поэтому метод `PUT`, а не `POST`: повторный вызов заменяет ресурс, а не создаёт новый. Старый файл при этом удаляется из MinIO. Менять может только автор опыта, иначе `403`.
+**`PUT /api/titration_pairs/:id/image`** — заменяет картинку. Операция идемпотентная, поэтому метод `PUT`, а не `POST`: повторный вызов заменяет ресурс, а не создаёт новый. Старый файл при этом удаляется из MinIO. Менять может только автор опыта, иначе `403`.
 
-**`PUT /api/titration_pairs/services/:id`** — обновляет услугу; в нашем домене обновление черновика одновременно его публикует. Тело — JSON:
+**`PUT /api/titration_pairs/:id`** — обновляет услугу; в нашем домене обновление черновика одновременно его публикует. Тело — JSON:
 
 | Поле | Обязательно | Ограничения |
 |------|-------------|-------------|
@@ -152,13 +163,13 @@ curl -X POST http://localhost:3000/api/titration_pairs/services -F "title=Опы
 
 Сервер сам ставит `status = 'published'`, `formed_at = NOW()` и `moderator_id`. Эти поля из запроса принять нельзя — вернуться из `published` в `draft` нельзя, попытка даёт `400`.
 
-**`DELETE /api/titration_pairs/services/:id`** — запись физически остаётся в БД, но получает `status = 'deleted'` и пропадает из всех списков. Ответ: `{"id": 1}`.
+**`DELETE /api/titration_pairs/:id`** — запись физически остаётся в БД, но получает `status = 'deleted'` и пропадает из всех списков. Ответ: `{"id": 1}`.
 
-**`POST /api/titration_pairs/services/:id/like`** — тело `{"value": 1}` поставить лайк, `{"value": 0}` снять. Значение может быть только 0 или 1, иначе `400`. Повторный лайк не создаёт дубль — за это отвечает уникальный индекс в БД. Ответ: `{"liked": true, "likes_count": 4}`.
+**`POST /api/titration_pairs/:id/like`** — тело `{"value": 1}` поставить лайк, `{"value": 0}` снять. Значение может быть только 0 или 1, иначе `400`. Повторный лайк не создаёт дубль — за это отвечает уникальный индекс в БД. Ответ: `{"liked": true, "likes_count": 4}`.
 
 **`POST /api/titration_pairs/users`** — регистрация, тело `{"username": "ivanov"}`. Имя должно быть непустым и уникальным, иначе `400` или `409`. Ответ `201`.
 
-**`POST /api/titration_pairs/sessions`** (вход) и **`DELETE /api/titration_pairs/sessions`** (выход) — заглушки под лабораторную №4, всегда возвращают `{"message": "...", "stub": true}`. Сессия — отдельный ресурс, поэтому вход это `POST`, а выход — `DELETE`; глаголов `login` / `logout` в URL нет.
+**`POST /api/titration_pairs/users/login`** (аутентификация) и **`POST /api/titration_pairs/users/logout`** (деавторизация) — заглушки под лабораторную №4, всегда возвращают `200` и `{"message": "...", "stub": true}`. Оба метода — `POST`, как требует задание, и относятся к домену «Пользователь».
 
 ### SSR-маршруты
 
@@ -174,7 +185,7 @@ WHERE t.status = 'published'
 GROUP BY t.id ORDER BY t.id ASC;
 ```
 
-**`GET /add`** — одна страница, но на ней два шага. Если черновика ещё нет — показывается поле для названия. Если есть — поля для медиа, описания, pH и концентрации.
+**`GET /add`** — одна страница, но на ней два шага. Если черновика ещё нет — показывается поле для названия, а фото и видео выводятся заглушками (`default-image.jpg`, `default-video.mp4`), заменить их на этом шаге нельзя. Если черновик есть — те же фото и видео уже можно заменить своими файлами (клик по превью), плюс поля pH и концентрации и кнопка «Опубликовать».
 
 **`POST /add/step1`** — принимает `title` и создаёт черновик со значениями по умолчанию (`ph = 7.0`, `concentration = 0.10`, `creator_id = 1`). Пустое название заменяется на «Новый опыт».
 
@@ -266,7 +277,7 @@ ALTER TABLE titrations ADD COLUMN IF NOT EXISTS moderator_id INT NULL;
 | DTO | Поле | Правила |
 |-----|------|---------|
 | `CreateServiceDto` | `title` | строка, непустая |
-| `PublishServiceDto` | `description` | строка |
+| `UpdateServiceDto` | `description` | строка |
 | | `ph` | число 0…14 |
 | | `concentration` | число ≥ 0 |
 | `LikeDto` | `value` | только 0 или 1 |
@@ -318,9 +329,11 @@ ALTER TABLE titrations ADD COLUMN IF NOT EXISTS moderator_id INT NULL;
 
 | Функция | Строки | Что делает |
 |---------|--------|------------|
-| `fileUrl(value)` | 18–22 | из имени файла собирает публичный адрес `http://localhost:9000/titration/<файл>`; если пришёл уже готовый URL — не трогает его |
-| `serializeService(row, likesCount)` | 38–52 | модель `Titration` → объект `ServiceDto` |
-| `serializeUser(row)` | 60–66 | модель `User` → объект `UserDto` |
+| `fileUrl(value)` | 32–36 | из имени файла собирает публичный адрес `http://localhost:9000/titration/<файл>`; если пришёл уже готовый URL — не трогает его |
+| `serializeService(row, likesCount)` | 62–75 | модель `Titration` → базовый объект `ServiceDto` |
+| `serializeFeedService(row, likesCount, isLiked)` | 77–79 | запись ленты: базовые поля + `is_liked` (`FeedServiceDto`) |
+| `serializeListService(row, likesCount, isMine)` | 81–83 | карточка списка: базовые поля + `is_mine` (`ListServiceDto`) |
+| `serializeUser(row)` | 91–97 | модель `User` → объект `UserDto` |
 
 Что именно делает `serializeService`:
 
@@ -329,7 +342,15 @@ ALTER TABLE titrations ADD COLUMN IF NOT EXISTS moderator_id INT NULL;
 - добавляет `likes_count` — количество лайков, которого в таблице `titrations` вообще нет, оно приходит вторым аргументом;
 - приводит `id`, `ph` и `concentration` к типу `Number`, а пустые значения — к `null`.
 
-Возвращается не экземпляр класса, а обычный объект `ServiceDto` — так TypeScript проверяет, что реальная форма ответа совпадает с описанием. Вызывается в `api.service.ts`: строки 54, 103, 133, 172, 211 и 285.
+Возвращается не экземпляр класса, а обычный объект `ServiceDto` — так TypeScript проверяет, что реальная форма ответа совпадает с описанием. `serializeFeedService` и `serializeListService` вызывают `serializeService` и дописывают к результату один признак, переводя `true`/`false` в `1`/`0`. Поэтому базовый набор полей везде одинаковый, а `is_liked` есть только в ленте, `is_mine` — только в списке.
+
+Где они вызываются в `api.service.ts`:
+
+| Строка | Метод | Сериализатор |
+|--------|-------|--------------|
+| 83 | `listServices()` — список | `serializeListService`, признак `is_mine`: `t.creator?.id === user.id` |
+| 352 | `toDto()` — черновик, создание, замена картинки, публикация | `serializeService` |
+| 364 | `toFeedDto()` — `feed()` и `feedItem()` | `serializeFeedService`, признак `is_liked`: есть ли лайк текущего пользователя |
 
 У SSR-слоя своя вёрстка данных: в `app.service.ts` есть отдельные приватные `getFileUrl()` (строка 63) и `formatPair()` (строка 69), которые кладут в шаблон то, что ожидают `grid.hbs`, `add.hbs` и `feed.hbs`. Общего сериализатора у двух слоёв нет намеренно — у них разные формы ответа.
 
@@ -353,16 +374,18 @@ export function currentUser(): AuthUser {
 
 Это singleton: `instance` создаётся один раз лениво, при первом вызове, и дальше переиспользуется всеми методами сервиса — на каждый запрос новый объект не заводится. Значение `id = 1` совпадает с пользователем из `scripts/seed.sql`.
 
-Функция вызывается в шести методах `ApiService` (`src/api/api.service.ts`):
+Функция вызывается в восьми методах `ApiService` (`src/api/api.service.ts`):
 
 | Строка | Метод | Как используется |
 |--------|-------|------------------|
-| 87 | `getDraft()` | ищет черновик: `where: { status: 'draft', creator: { id: user.id } }` |
-| 111 | `createDraft()` | сохраняет `creator: { id: user.id }` у новой записи |
-| 141 | `uploadImage()` | `if (item.creator?.id !== user.id)` → `403` |
-| 180 | `publishDraft()` | та же проверка автора, плюс `moderator_id: user.id` при публикации |
-| 219 | `deleteService()` | `if (item.creator?.id !== user.id)` → `403` |
-| 238 | `setLike()` | ищет лайк: `where: { user: { id: user.id }, titration: { id } }` |
+| 67 | `listServices()` | признак `is_mine` в списке: `t.creator?.id === user.id` |
+| 133 | `getDraft()` | ищет черновик: `where: { status: 'draft', creator: { id: user.id } }` |
+| 153 | `createDraft()` | сохраняет `creator: { id: user.id }` у новой записи |
+| 183 | `uploadImage()` | `if (item.creator?.id !== user.id)` → `403` |
+| 222 | `updateService()` | та же проверка автора, плюс `moderator_id: user.id` при публикации |
+| 260 | `deleteService()` | `if (item.creator?.id !== user.id)` → `403` |
+| 279 | `setLike()` | ищет лайк: `where: { user: { id: user.id }, titration: { id } }` |
+| 357 | `toFeedDto()` | признак `is_liked` в ленте: ищет лайк текущего пользователя у записи |
 
 Проверки прав работают как обычно, но всегда от имени пользователя `admin` — это ожидаемое поведение заглушки, полноценная авторизация будет в лабораторной №4.
 

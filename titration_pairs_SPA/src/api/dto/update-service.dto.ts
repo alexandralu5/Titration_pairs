@@ -2,7 +2,7 @@ import { Type } from 'class-transformer';
 import { IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 
 /**
- * DTO обновления услуги: PUT /api/titration_pairs/services/:id
+ * DTO обновления услуги: PUT /api/titration_pairs/:id
  * (обновление черновика одновременно публикует его — draft -> published).
  * Принимаются только разрешённые поля предметной области.
  * Смена статуса, модератор и дата формирования вычисляются на бэкенде.

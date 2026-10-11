@@ -296,6 +296,11 @@ body.mobile-body {
   cursor: pointer;
 }
 
+/* Заглушка медиа на шаге 1: показывается, но заменить её нельзя */
+.media-preview-static {
+  cursor: default;
+}
+
 .button_primary {
   background-color: var(--core--accent--blue);
   color: var(--extended--grey--0);

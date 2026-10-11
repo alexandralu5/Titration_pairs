@@ -1,12 +1,13 @@
 {
   "info": {
     "name": "Titration Pairs — REST API (веб-сервис /api/titration_pairs)",
-    "description": "Коллекция для скриншотов лабораторной №3.\n\nURL-дизайн: в URL только существительные во множественном числе, глаголов нет; действие задаёт HTTP-метод; идентификатор объекта идёт в пути (:id); фильтры и условия выборки — в строке запроса.\n\nВеб-сервис: список с фильтром, добавление услуги (multipart, файлы в Minio), замена изображения, обновление услуги (публикация черновика), лента (?next=true), лайк, soft-delete, пользователь (POST /users) и сессии (POST /sessions, DELETE /sessions).\n\nПеременные коллекции:\n  baseUrl   = http://localhost:3000/api/titration_pairs\n  serviceId = id созданной услуги (заполняется автоматически из GET /services/draft)\n  imagePath, videoPath = пути к файлам для загрузки",
+    "description": "Коллекция для скриншотов лабораторной №3.\n\nURL-дизайн: услуги лежат прямо под /api/titration_pairs, пользователи — под /users; действие задаёт HTTP-метод; идентификатор объекта идёт в пути (:id); фильтры и условия выборки — в строке запроса.\n\nВеб-сервис: список с фильтром, добавление услуги (multipart, файлы в Minio), замена изображения, обновление услуги (публикация черновика), лента (?next=true), лайк, soft-delete, пользователь: регистрация (POST /users), аутентификация (POST /users/login) и деавторизация (POST /users/logout) — заглушки для лабораторной №4.\n\nПеременные коллекции:\n  baseUrl   = http://localhost:3000/api/titration_pairs\n  serviceId = id созданной услуги (заполняется автоматически из GET /draft)\n  feedId    = id первой записи ленты (заполняется автоматически из GET /feed)\n  imagePath, videoPath = пути к файлам для загрузки",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:3000/api/titration_pairs" },
     { "key": "serviceId", "value": "18" },
+    { "key": "feedId", "value": "1" },
     {
       "key": "imagePath",
       "value": "T:/home/alexandralu/Titration_pairs/titration_pairs_SPA/public/img/default-image.jpg"
@@ -23,12 +24,11 @@
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "{{baseUrl}}/services?minConcentration=0.1",
+          "raw": "{{baseUrl}}?minConcentration=0.1",
           "host": ["{{baseUrl}}"],
-          "path": ["services"],
           "query": [{ "key": "minConcentration", "value": "0.1" }]
         },
-        "description": "GET /api/titration_pairs/services — только опубликованные записи; фильтрация на бэкенде по минимальной концентрации. Фильтр передаётся в строке запроса."
+        "description": "GET /api/titration_pairs — только опубликованные записи; фильтрация на бэкенде по минимальной концентрации. Фильтр передаётся в строке запроса. У каждой записи есть is_mine — создатель услуги совпадает с текущим пользователем."
       },
       "event": [
         {
@@ -37,7 +37,8 @@
             "type": "text/javascript",
             "exec": [
               "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
-              "pm.test('Набор полей одинаковый, status нет', function () { var keys = 'concentration,created_at,description,formed_at,id,image_url,likes_count,ph,title,video_url'; pm.response.json().forEach(function (s) { pm.expect(Object.keys(s).sort().join(',')).to.eql(keys); }); });"
+              "pm.test('Базовые поля + is_mine, status нет', function () { var keys = 'concentration,created_at,description,formed_at,id,image_url,is_mine,likes_count,ph,title,video_url'; pm.response.json().forEach(function (s) { pm.expect(Object.keys(s).sort().join(',')).to.eql(keys); }); });",
+              "pm.test('is_mine — признак 0/1 «моя услуга»', function () { pm.response.json().forEach(function (s) { pm.expect(s.is_mine).to.be.oneOf([0, 1]); }); });"
             ]
           }
         }
@@ -57,11 +58,10 @@
           ]
         },
         "url": {
-          "raw": "{{baseUrl}}/services",
-          "host": ["{{baseUrl}}"],
-          "path": ["services"]
+          "raw": "{{baseUrl}}",
+          "host": ["{{baseUrl}}"]
         },
-        "description": "POST /api/titration_pairs/services — создание черновика. Файлы загружаются в Minio латинскими именами, в БД сохраняются имена файлов. Системные поля (id, status, creator, moderator, даты) с клиента не принимаются."
+        "description": "POST /api/titration_pairs — создание черновика. Файлы загружаются в Minio латинскими именами, в БД сохраняются имена файлов. Системные поля (id, status, creator, moderator, даты) с клиента не принимаются."
       },
       "event": [
         {
@@ -72,7 +72,7 @@
               "pm.test('Status 201', function () { pm.response.to.have.status(201); });",
               "pm.test('Черновик с Minio-URL', function () {",
               "  var s = pm.response.json();",
-              "  pm.test('Набор полей одинаковый, status нет', function () { pm.expect(Object.keys(s).sort().join(',')).to.eql('concentration,created_at,description,formed_at,id,image_url,likes_count,ph,title,video_url'); });",
+              "  pm.test('Базовый набор полей: без is_liked, is_mine и status', function () { pm.expect(Object.keys(s).sort().join(',')).to.eql('concentration,created_at,description,formed_at,id,image_url,likes_count,ph,title,video_url'); });",
               "  pm.expect(s.image_url).to.match(/^http:\\/\\/localhost:9000\\/titration\\//);",
               "  pm.test('id сохранён в переменную сервиса', function () { pm.expect(s.id).is.not.undefined; pm.collectionVariables.set('serviceId', String(s.id)); });",
               "});"
@@ -91,11 +91,11 @@
           "formdata": [{ "key": "image", "type": "file", "src": "{{imagePath}}" }]
         },
         "url": {
-          "raw": "{{baseUrl}}/services/{{serviceId}}/image",
+          "raw": "{{baseUrl}}/{{serviceId}}/image",
           "host": ["{{baseUrl}}"],
-          "path": ["services", "{{serviceId}}", "image"]
+          "path": ["{{serviceId}}", "image"]
         },
-        "description": "PUT /api/titration_pairs/services/:id/image — замена изображения услуги. Метод PUT, потому что операция идемпотентная: повторный вызов заменяет ресурс, а не создаёт новый. Старое изображение удаляется из MinIO, новое сохраняется латинским именем (методичка, раздел MinIO)."
+        "description": "PUT /api/titration_pairs/:id/image — замена изображения услуги. Метод PUT, потому что операция идемпотентная: повторный вызов заменяет ресурс, а не создаёт новый. Старое изображение удаляется из MinIO, новое сохраняется латинским именем (методичка, раздел MinIO)."
       },
       "event": [
         {
@@ -105,7 +105,7 @@
             "exec": [
               "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
               "pm.test('Новое изображение с латинским именем в MinIO', function () {",
-              "  pm.expect(pm.response.json().image_url).to.match(/^http:\\/\\/localhost:9000\\/titration\\\\/img_[a-z0-9_]+\\\\.(jpe?g|png|gif|webp)$/);",
+              "  pm.expect(pm.response.json().image_url).to.match(/^http:\\/\\/localhost:9000\\/titration\\/img_[a-z0-9_]+\\.(jpe?g|png|gif|webp)$/);",
               "});"
             ]
           }
@@ -118,11 +118,11 @@
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "{{baseUrl}}/services/draft",
+          "raw": "{{baseUrl}}/draft",
           "host": ["{{baseUrl}}"],
-          "path": ["services", "draft"]
+          "path": ["draft"]
         },
-        "description": "GET /api/titration_pairs/services/draft — черновик текущего пользователя (не более 1 записи), id не указывается. При 404 — черновика нет."
+        "description": "GET /api/titration_pairs/draft — черновик текущего пользователя (не более 1 записи), id не указывается. При 404 — черновика нет."
       },
       "event": [
         {
@@ -132,7 +132,7 @@
             "exec": [
               "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
               "var s = pm.response.json();",
-              "pm.test('Набор полей одинаковый, status нет', function () { pm.expect(Object.keys(s).sort().join(',')).to.eql('concentration,created_at,description,formed_at,id,image_url,likes_count,ph,title,video_url'); });",
+              "pm.test('Базовый набор полей: без is_liked, is_mine и status', function () { pm.expect(Object.keys(s).sort().join(',')).to.eql('concentration,created_at,description,formed_at,id,image_url,likes_count,ph,title,video_url'); });",
               "pm.collectionVariables.set('serviceId', String(s.id));"
             ]
           }
@@ -149,11 +149,11 @@
           "raw": "{ \"ph\": 7.0, \"concentration\": 0.12, \"description\": \"Точка эквивалентности при pH 7.0.\" }"
         },
         "url": {
-          "raw": "{{baseUrl}}/services/{{serviceId}}",
+          "raw": "{{baseUrl}}/{{serviceId}}",
           "host": ["{{baseUrl}}"],
-          "path": ["services", "{{serviceId}}"]
+          "path": ["{{serviceId}}"]
         },
-        "description": "PUT /api/titration_pairs/services/:id — обновление услуги, в нашем домене оно же публикует черновик (draft → published). Глагола publish в URL нет: действие задаёт метод PUT, id идёт в пути. Только у создателя и только из черновика (вернуться в черновик нельзя). Модератор и дата формирования проставляются на бэкенде."
+        "description": "PUT /api/titration_pairs/:id — обновление услуги, в нашем домене оно же публикует черновик (draft → published). Глагола publish в URL нет: действие задаёт метод PUT, id идёт в пути. Только у создателя и только из черновика (вернуться в черновик нельзя). Модератор и дата формирования проставляются на бэкенде."
       },
       "event": [
         {
@@ -163,7 +163,7 @@
             "exec": [
               "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
               "var s = pm.response.json();",
-              "pm.test('Набор полей одинаковый, status нет', function () { pm.expect(Object.keys(s).sort().join(',')).to.eql('concentration,created_at,description,formed_at,id,image_url,likes_count,ph,title,video_url'); });",
+              "pm.test('Базовый набор полей: без is_liked, is_mine и status', function () { pm.expect(Object.keys(s).sort().join(',')).to.eql('concentration,created_at,description,formed_at,id,image_url,likes_count,ph,title,video_url'); });",
               "pm.expect(s.ph).to.eql(7.0);"
             ]
           }
@@ -176,11 +176,11 @@
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "{{baseUrl}}/services/feed",
+          "raw": "{{baseUrl}}/feed",
           "host": ["{{baseUrl}}"],
-          "path": ["services", "feed"]
+          "path": ["feed"]
         },
-        "description": "GET /api/titration_pairs/services/feed — лента всех опубликованных услуг."
+        "description": "GET /api/titration_pairs/feed — лента без ид: одна запись (объект, а не массив) — первая опубликованная. is_liked — лайкнул ли её текущий пользователь."
       },
       "event": [
         {
@@ -189,7 +189,11 @@
             "type": "text/javascript",
             "exec": [
               "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
-              "pm.test('Набор полей одинаковый, status нет', function () { var keys = 'concentration,created_at,description,formed_at,id,image_url,likes_count,ph,title,video_url'; pm.response.json().forEach(function (s) { pm.expect(Object.keys(s).sort().join(',')).to.eql(keys); }); });"
+              "var s = pm.response.json();",
+              "pm.collectionVariables.set('feedId', String(s.id));",
+              "pm.test('В ленте одна запись, а не массив', function () { pm.expect(s).to.be.an('object'); pm.expect(Array.isArray(s)).to.eql(false); });",
+              "pm.test('Базовые поля + is_liked, status нет', function () { pm.expect(Object.keys(s).sort().join(',')).to.eql('concentration,created_at,description,formed_at,id,image_url,is_liked,likes_count,ph,title,video_url'); });",
+              "pm.test('is_liked — признак 0/1 «я лайкнул»', function () { pm.expect(s.is_liked).to.be.oneOf([0, 1]); });"
             ]
           }
         }
@@ -201,12 +205,12 @@
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "{{baseUrl}}/services/feed/{{serviceId}}?next=true",
+          "raw": "{{baseUrl}}/feed/{{feedId}}?next=true",
           "host": ["{{baseUrl}}"],
-          "path": ["services", "feed", "{{serviceId}}"],
+          "path": ["feed", "{{feedId}}"],
           "query": [{ "key": "next", "value": "true" }]
         },
-        "description": "GET /api/titration_pairs/services/feed/:id?next=true — возвращает следующую за :id запись ленты. Без ?next= возвращается сама запись :id."
+        "description": "GET /api/titration_pairs/feed/:id?next=true — возвращает следующую за :id запись ленты. Без ?next= возвращается сама запись :id. В ответе одна запись с признаком is_liked."
       },
       "event": [
         {
@@ -214,7 +218,8 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "pm.test('Status 200', function () { pm.response.to.have.status(200); });"
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('В записи ленты есть is_liked (0/1) и нет is_mine', function () { var s = pm.response.json(); pm.expect(s.is_liked).to.be.oneOf([0, 1]); pm.expect(s).to.not.have.property('is_mine'); });"
             ]
           }
         }
@@ -230,11 +235,11 @@
           "raw": "{ \"value\": 1 }"
         },
         "url": {
-          "raw": "{{baseUrl}}/services/{{serviceId}}/like",
+          "raw": "{{baseUrl}}/{{serviceId}}/like",
           "host": ["{{baseUrl}}"],
-          "path": ["services", "{{serviceId}}", "like"]
+          "path": ["{{serviceId}}", "like"]
         },
-        "description": "POST /api/titration_pairs/services/:id/like — value=1 ставит лайк от текущего пользователя, value=0 отменяет."
+        "description": "POST /api/titration_pairs/:id/like — value=1 ставит лайк от текущего пользователя, value=0 отменяет."
       },
       "event": [
         {
@@ -257,11 +262,11 @@
         "method": "DELETE",
         "header": [],
         "url": {
-          "raw": "{{baseUrl}}/services/{{serviceId}}",
+          "raw": "{{baseUrl}}/{{serviceId}}",
           "host": ["{{baseUrl}}"],
-          "path": ["services", "{{serviceId}}"]
+          "path": ["{{serviceId}}"]
         },
-        "description": "DELETE /api/titration_pairs/services/:id — мягкое удаление: в БД status = 'deleted', запись клиенту больше не возвращается. Ответ: {\"id\": 1}."
+        "description": "DELETE /api/titration_pairs/:id — мягкое удаление: в БД status = 'deleted', запись клиенту больше не возвращается. Ответ: {\"id\": 1}."
       },
       "event": [
         {
@@ -271,8 +276,8 @@
             "exec": [
               "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
               "pm.test('В ответе только id, status не отдаётся', function () { var b = pm.response.json(); pm.expect(Object.keys(b).join(',')).to.eql('id'); pm.expect(String(b.id)).to.eql(pm.collectionVariables.get('serviceId')); });",
-              "pm.test('Удалённой записи нет в ленте', function () {",
-              "  pm.sendRequest('http://localhost:3000/api/titration_pairs/services/feed', function (e, r) {",
+              "pm.test('Удалённой записи нет в списке', function () {",
+              "  pm.sendRequest('http://localhost:3000/api/titration_pairs', function (e, r) {",
               "    var ids = r.json().map(function (s) { return String(s.id); });",
               "    pm.expect(ids).to.not.include(pm.collectionVariables.get('serviceId'));",
               "  });",
@@ -312,17 +317,20 @@
       ]
     },
     {
-      "name": "10. Открыть сессию (вход, заглушка)",
+      "name": "10. Аутентификация (заглушка)",
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": { "mode": "raw", "raw": "{ \"username\": \"new_user_1\" }" },
-        "url": {
-          "raw": "{{baseUrl}}/sessions",
-          "host": ["{{baseUrl}}"],
-          "path": ["sessions"]
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"username\": \"new_user_1\" }"
         },
-        "description": "POST /api/titration_pairs/sessions — открытие сессии, то есть вход (заглушка для лабораторной №4). Глагола login в URL нет: действие задаёт метод POST, ресурс — «сессии»."
+        "url": {
+          "raw": "{{baseUrl}}/users/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["users", "login"]
+        },
+        "description": "POST /api/titration_pairs/users/login — аутентификация (заглушка для лабораторной №4), домен «Пользователь»."
       },
       "event": [
         {
@@ -330,23 +338,23 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "pm.test('Status 201', function () { pm.response.to.have.status(201); });"
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });"
             ]
           }
         }
       ]
     },
     {
-      "name": "11. Закрыть сессию (выход, заглушка)",
+      "name": "11. Деавторизация (заглушка)",
       "request": {
-        "method": "DELETE",
+        "method": "POST",
         "header": [],
         "url": {
-          "raw": "{{baseUrl}}/sessions",
+          "raw": "{{baseUrl}}/users/logout",
           "host": ["{{baseUrl}}"],
-          "path": ["sessions"]
+          "path": ["users", "logout"]
         },
-        "description": "DELETE /api/titration_pairs/sessions — закрытие сессии, то есть выход (заглушка для лабораторной №4). Глагола logout в URL нет: действие задаёт метод DELETE, ресурс — «сессии»."
+        "description": "POST /api/titration_pairs/users/logout — деавторизация (заглушка для лабораторной №4), домен «Пользователь». Метод POST, как и у аутентификации."
       },
       "event": [
         {

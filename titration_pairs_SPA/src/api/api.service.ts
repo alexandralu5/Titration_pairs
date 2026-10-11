@@ -1,12 +1,21 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MoreThanOrEqual, Repository } from 'typeorm';
+import { MoreThan, MoreThanOrEqual, Repository } from 'typeorm';
 import * as Minio from 'minio';
 import { Titration } from '../titration/entities/titration.entity';
 import { User } from '../titration/entities/user.entity';
 import { Like } from '../titration/entities/like.entity';
 import { currentUser } from './current-user';
-import { serializeService, serializeUser, ServiceDto, UserDto } from './serializers';
+import {
+  FeedServiceDto,
+  ListServiceDto,
+  serializeFeedService,
+  serializeListService,
+  serializeService,
+  serializeUser,
+  ServiceDto,
+  UserDto,
+} from './serializers';
 import { bucketName, MINIO_CLIENT } from './minio.provider';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
@@ -14,10 +23,11 @@ import { LikeDto } from './dto/like.dto';
 import { RegisterUserDto } from './dto/register-user.dto';
 
 /**
- * Домен "Услуга/опыт" + "Пользователь" + "Сессия".
+ * Домен "Услуга/опыт" + "Пользователь".
  *
- * URL-дизайн: только существительные во множественном числе, глаголов нет;
- * действие задаёт HTTP-метод, id — в пути, фильтры — в строке запроса.
+ * URL-дизайн: действие задаёт HTTP-метод, id — в пути, фильтры — в строке
+ * запроса. Услуги лежат прямо под /api/titration_pairs, пользователи —
+ * под /api/titration_pairs/users.
  *
  * Бизнес-логика:
  *  - записи со статусом 'deleted' клиенту НЕ возвращаются;
@@ -35,7 +45,9 @@ import { RegisterUserDto } from './dto/register-user.dto';
  *  - исключения выбрасываются без текстов, только со стандартным кодом
  *    (404 — не найдено, 403 — чужой объект, 400 — некорректный ввод,
  *    409 — конфликт);
- *  - набор полей ServiceDto всегда одинаковый, пустые значения — null.
+ *  - базовый набор полей ServiceDto всегда одинаковый, пустые значения — null;
+ *  - is_liked (1/0) отдаётся только в ленте, is_mine (1/0) — только в списке;
+ *    оба считаются относительно currentUser().
  */
 @Injectable()
 export class ApiService {
@@ -48,9 +60,12 @@ export class ApiService {
 
   // ==========================================================================
   // Домен "Услуга" — список с фильтрацией (только опубликованные)
-  // GET /api/titration_pairs/services?minConcentration=0.1
+  // Признак is_mine (1/0): создатель услуги совпадает с текущим пользователем.
+  // GET /api/titration_pairs?minConcentration=0.1
   // ==========================================================================
-  async listServices(minConcentration?: number): Promise<ServiceDto[]> {
+  async listServices(minConcentration?: number): Promise<ListServiceDto[]> {
+    const user = currentUser();
+
     const where: any = { status: 'published' };
     if (minConcentration != null && !isNaN(minConcentration)) {
       where.concentration = MoreThanOrEqual(minConcentration);
@@ -59,41 +74,60 @@ export class ApiService {
     const items = await this.titrationsRepo.find({
       where,
       order: { id: 'ASC' },
+      relations: { creator: true },
     });
 
     const counts = await this.loadLikesCounts(items.map((t) => t.id));
 
-    return items.map((t) => serializeService(t, counts.get(t.id) ?? 0));
+    return items.map((t) =>
+      serializeListService(t, counts.get(t.id) ?? 0, t.creator?.id === user.id),
+    );
   }
 
   // ==========================================================================
-  // Домен "Услуга" — лента (только опубликованные)
-  // GET /api/titration_pairs/services/feed
+  // Домен "Услуга" — лента (только опубликованные): ОДНА запись, первая по id.
+  // Признак is_liked (1/0): текущий пользователь лайкнул эту услугу.
+  // GET /api/titration_pairs/feed
   // ==========================================================================
-  async feed(): Promise<ServiceDto[]> {
-    return this.listServices();
+  async feed(): Promise<FeedServiceDto> {
+    const item = await this.titrationsRepo.findOne({
+      where: { status: 'published' },
+      order: { id: 'ASC' },
+    });
+    if (!item) {
+      throw new NotFoundException();
+    }
+    return this.toFeedDto(item);
   }
 
   // ==========================================================================
-  // Домен "Услуга" — лента по id (?next=true)
-  // GET /api/titration_pairs/services/feed/:id?next=true
+  // Домен "Услуга" — лента по id: одна запись (?next=true — следующая за ней)
+  // GET /api/titration_pairs/feed/:id?next=true
   // ==========================================================================
-  async feedItem(id: number, next: boolean): Promise<ServiceDto> {
-    const items = await this.feed();
-    const idx = items.findIndex((i) => i.id === id);
-    if (idx === -1) {
+  async feedItem(id: number, next: boolean): Promise<FeedServiceDto> {
+    const current = await this.titrationsRepo.findOne({
+      where: { id, status: 'published' },
+    });
+    if (!current) {
       throw new NotFoundException();
     }
-    const target = next ? items[idx + 1] : items[idx];
-    if (!target) {
+    if (!next) {
+      return this.toFeedDto(current);
+    }
+
+    const following = await this.titrationsRepo.findOne({
+      where: { id: MoreThan(id), status: 'published' },
+      order: { id: 'ASC' },
+    });
+    if (!following) {
       throw new NotFoundException();
     }
-    return target;
+    return this.toFeedDto(following);
   }
 
   // ==========================================================================
   // Домен "Услуга" — получение черновика (не более 1 записи, id не указывается)
-  // GET /api/titration_pairs/services/draft
+  // GET /api/titration_pairs/draft
   // ==========================================================================
   async getDraft(): Promise<ServiceDto> {
     const user = currentUser(); // Singleton-функция с константой пользователя
@@ -108,16 +142,12 @@ export class ApiService {
       throw new NotFoundException();
     }
 
-    const likesCount = await this.likesRepo.count({
-      where: { titration: { id: draft.id } },
-    });
-
-    return serializeService(draft, likesCount);
+    return this.toDto(draft);
   }
 
   // ==========================================================================
   // Домен "Услуга" — создание черновика + загрузка файлов в Minio.
-  // POST /api/titration_pairs/services  (multipart: title, image, video)
+  // POST /api/titration_pairs  (multipart: title, image, video)
   // ==========================================================================
   async createDraft(dto: CreateServiceDto, imageFile?: Express.Multer.File, videoFile?: Express.Multer.File): Promise<ServiceDto> {
     const user = currentUser();
@@ -142,12 +172,12 @@ export class ApiService {
     });
 
     await this.titrationsRepo.save(draft);
-    return serializeService(draft, 0);
+    return this.toDto(draft);
   }
 
   // ==========================================================================
   // Домен "Услуга" — замена картинки услуги (старое изображение удаляется).
-  // PUT /api/titration_pairs/services/:id/image  (multipart: image) — приём по методичке MinIO
+  // PUT /api/titration_pairs/:id/image  (multipart: image) — приём по методичке MinIO
   // ==========================================================================
   async uploadImage(id: number, file?: Express.Multer.File): Promise<ServiceDto> {
     const user = currentUser();
@@ -179,15 +209,14 @@ export class ApiService {
     const newName = await this.saveFile(file, 'img');
     await this.titrationsRepo.update(id, { image_url: newName });
 
-    const likesCount = await this.likesRepo.count({ where: { titration: { id } } });
     const saved = await this.titrationsRepo.findOne({ where: { id } });
-    return serializeService(saved, likesCount);
+    return this.toDto(saved);
   }
 
   // ==========================================================================
   // Домен "Услуга" — обновление услуги; для черновика это одновременно
   // публикация (смена статуса draft -> published).
-  // PUT /api/titration_pairs/services/:id
+  // PUT /api/titration_pairs/:id
   // ==========================================================================
   async updateService(id: number, dto: UpdateServiceDto): Promise<ServiceDto> {
     const user = currentUser();
@@ -219,14 +248,13 @@ export class ApiService {
 
     await this.titrationsRepo.update(id, update);
 
-    const likesCount = await this.likesRepo.count({ where: { titration: { id } } });
     const saved = await this.titrationsRepo.findOne({ where: { id } });
-    return serializeService(saved, likesCount);
+    return this.toDto(saved);
   }
 
   // ==========================================================================
   // Домен "Услуга" — удаление (только soft delete: status = 'deleted').
-  // DELETE /api/titration_pairs/services/:id
+  // DELETE /api/titration_pairs/:id
   // ==========================================================================
   async deleteService(id: number): Promise<{ id: number }> {
     const user = currentUser();
@@ -245,7 +273,7 @@ export class ApiService {
 
   // ==========================================================================
   // Домен "Услуга" — лайк от текущего пользователя.
-  // POST /api/titration_pairs/services/:id/like  { value: 1 | 0 }
+  // POST /api/titration_pairs/:id/like  { value: 1 | 0 }
   // ==========================================================================
   async setLike(id: number, dto: LikeDto): Promise<{ liked: boolean; likes_count: number }> {
     const user = currentUser();
@@ -299,16 +327,16 @@ export class ApiService {
   }
 
   // ==========================================================================
-  // Домен "Сессия" — аутентификация (заглушка для 4-й лабораторной).
-  // POST /api/titration_pairs/sessions
+  // Домен "Пользователь" — аутентификация (заглушка для 4-й лабораторной).
+  // POST /api/titration_pairs/users/login
   // ==========================================================================
   async login(body: any): Promise<{ message: string; stub: boolean }> {
     return { message: 'Заглушка аутентификации (лабораторная №4)', stub: true };
   }
 
   // ==========================================================================
-  // Домен "Сессия" — деавторизация (заглушка для 4-й лабораторной).
-  // DELETE /api/titration_pairs/sessions
+  // Домен "Пользователь" — деавторизация (заглушка для 4-й лабораторной).
+  // POST /api/titration_pairs/users/logout
   // ==========================================================================
   async logout(): Promise<{ message: string; stub: boolean }> {
     return { message: 'Заглушка деавторизации (лабораторная №4)', stub: true };
@@ -317,6 +345,24 @@ export class ApiService {
   // ==========================================================================
   // Приватные помощники
   // ==========================================================================
+
+  /** Модель -> базовый ServiceDto (с количеством лайков). */
+  private async toDto(item: Titration): Promise<ServiceDto> {
+    const likesCount = await this.likesRepo.count({ where: { titration: { id: item.id } } });
+    return serializeService(item, likesCount);
+  }
+
+  /** Модель -> запись ленты: базовые поля + is_liked текущего пользователя. */
+  private async toFeedDto(item: Titration): Promise<FeedServiceDto> {
+    const user = currentUser();
+
+    const likesCount = await this.likesRepo.count({ where: { titration: { id: item.id } } });
+    const myLike = await this.likesRepo.findOne({
+      where: { user: { id: user.id }, titration: { id: item.id } },
+    });
+
+    return serializeFeedService(item, likesCount, !!myLike);
+  }
 
   /** Количество лайков для списка id. */
   private async loadLikesCounts(ids: number[]): Promise<Map<number, number>> {

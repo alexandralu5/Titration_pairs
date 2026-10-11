@@ -40,6 +40,9 @@ async function bootstrap() {
   // CORS для SPA (фронтенд будет обращаться к /api/titration_pairs)
   app.enableCors();
 
-  await app.listen(3000);
+  // Явно слушаем IPv4 (0.0.0.0): по умолчанию Node занимает только IPv6-адрес "::",
+  // и тогда WSL не пробрасывает порт на 127.0.0.1 в Windows — Postman и браузер
+  // на http://localhost:3000 получают "Could not send request".
+  await app.listen(3000, '0.0.0.0');
 }
 bootstrap();
