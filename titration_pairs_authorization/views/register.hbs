@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Регистрация</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="mobile-body">
+  <div class="mobile-container">
+
+    <header class="mobile-header">
+      <h2>🧪 Регистрация</h2>
+    </header>
+
+    <form id="authForm" class="add-card">
+      <div class="form-group">
+        <label>Логин</label>
+        <input type="text" name="username" maxlength="50" autocomplete="username" required>
+      </div>
+
+      <div class="form-group">
+        <label>Пароль (не короче 6 символов)</label>
+        <input type="password" name="password" minlength="6" maxlength="72" autocomplete="new-password" required>
+      </div>
+
+      <p id="authError" class="auth-error" hidden></p>
+
+      <button type="submit" class="button_primary">Зарегистрироваться</button>
+      <p class="auth-hint">Уже есть аккаунт? <a href="/login">Вход</a></p>
+    </form>
+
+    <nav class="mobile-nav">
+      <a href="/feed">Лента</a>
+      <a href="/add">Добавление</a>
+      <a href="/grid">Плитка</a>
+      <a href="/profile" class="active">Профиль</a>
+    </nav>
+
+  </div>
+
+  <script>
+    // Регистрация через API; после успеха — на страницу входа.
+    document.getElementById('authForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.target;
+      const error = document.getElementById('authError');
+      error.hidden = true;
+
+      const res = await fetch('/api/titration_pairs/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: form.username.value, password: form.password.value }),
+      });
+
+      if (res.ok) {
+        window.location.href = '/login';
+        return;
+      }
+      error.textContent = res.status === 409 ? 'Такой логин уже занят' : 'Не удалось зарегистрироваться, проверьте поля';
+      error.hidden = false;
+    });
+  </script>
+</body>
+</html>

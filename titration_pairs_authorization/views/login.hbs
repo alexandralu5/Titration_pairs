@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Вход</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="mobile-body">
+  <div class="mobile-container">
+
+    <header class="mobile-header">
+      <h2>🧪 Вход</h2>
+    </header>
+
+    <form id="authForm" class="add-card">
+      <div class="form-group">
+        <label>Логин</label>
+        <input type="text" name="username" autocomplete="username" required>
+      </div>
+
+      <div class="form-group">
+        <label>Пароль</label>
+        <input type="password" name="password" autocomplete="current-password" required>
+      </div>
+
+      <p id="authError" class="auth-error" hidden></p>
+
+      <button type="submit" class="button_primary">Войти</button>
+      <p class="auth-hint">Нет аккаунта? <a href="/register">Регистрация</a></p>
+    </form>
+
+    <nav class="mobile-nav">
+      <a href="/feed">Лента</a>
+      <a href="/add">Добавление</a>
+      <a href="/grid">Плитка</a>
+      <a href="/profile" class="active">Профиль</a>
+    </nav>
+
+  </div>
+
+  <script>
+    // Форма шлёт JSON в API аутентификации; сервер отвечает кукой sessionId
+    // (HttpOnly — из скрипта она не видна), после чего открываем профиль.
+    document.getElementById('authForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.target;
+      const error = document.getElementById('authError');
+      error.hidden = true;
+
+      const res = await fetch('/api/titration_pairs/users/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: form.username.value, password: form.password.value }),
+      });
+
+      if (res.ok) {
+        window.location.href = '/profile';
+        return;
+      }
+      error.textContent = res.status === 401 ? 'Неверный логин или пароль' : 'Не удалось войти, проверьте поля';
+      error.hidden = false;
+    });
+  </script>
+</body>
+</html>
