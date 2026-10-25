@@ -1,10 +1,12 @@
-import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { ExecutionContext, HttpException, HttpStatus, UnauthorizedException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { AuthService } from '../src/auth/auth.service';
 import { AuthUser } from '../src/auth/auth-user';
 import { OptionalSessionGuard, SessionGuard } from '../src/auth/guards/session.guard';
 import { hashPassword, verifyPassword } from '../src/auth/password';
 import { serializeUser } from '../src/api/serializers';
+import { LoginAttemptsService } from '../src/session/login-attempts.service';
+import { SessionService } from '../src/session/session.service';
 
 const USER: AuthUser = { id: 2, username: 'ivanov', role: 'user' };
 
@@ -89,5 +91,58 @@ describe('Сериализатор пользователя', () => {
 
     expect(dto).toEqual({ id: 1, username: 'admin', role: 'moderator', created_at: null });
     expect(dto).not.toHaveProperty('password');
+  });
+});
+
+describe('AuthService.login — ограничение неудачных попыток', () => {
+  async function setup(blocked = false) {
+    const stored = { id: 1, username: 'admin', role: 'moderator', created_at: null, password: await hashPassword('admin123') };
+    const usersRepo = { findOne: vi.fn(async ({ where }) => (where.username === 'admin' ? stored : null)) };
+    const sessions = { create: vi.fn(async () => undefined) };
+    const attempts = {
+      isBlocked: vi.fn(async () => blocked),
+      registerFailure: vi.fn(async () => 1),
+      reset: vi.fn(async () => undefined),
+    };
+    const service = new AuthService(
+      usersRepo as any,
+      sessions as unknown as SessionService,
+      attempts as unknown as LoginAttemptsService,
+    );
+    return { service, usersRepo, sessions, attempts };
+  }
+
+  it('неверный пароль: попытка засчитывается, ответ 401, сессии нет', async () => {
+    const { service, attempts, sessions } = await setup();
+
+    await expect(service.login({ username: 'admin', password: 'wrong' })).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(attempts.registerFailure).toHaveBeenCalledWith('admin');
+    expect(sessions.create).not.toHaveBeenCalled();
+  });
+
+  it('неизвестный логин тоже засчитывается как неудачная попытка', async () => {
+    const { service, attempts } = await setup();
+
+    await expect(service.login({ username: 'nobody', password: 'admin123' })).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(attempts.registerFailure).toHaveBeenCalledWith('nobody');
+  });
+
+  it('успешный вход обнуляет счётчик и создаёт сессию', async () => {
+    const { service, attempts, sessions } = await setup();
+
+    const { user } = await service.login({ username: ' admin ', password: 'admin123' });
+    expect(user.username).toBe('admin');
+    expect(attempts.reset).toHaveBeenCalledWith('admin');
+    expect(sessions.create).toHaveBeenCalledOnce();
+  });
+
+  it('при исчерпанном лимите — 429, даже с верным паролем; база и пароль не проверяются', async () => {
+    const { service, usersRepo, sessions } = await setup(true);
+
+    const error = await service.login({ username: 'admin', password: 'admin123' }).catch((e) => e);
+    expect(error).toBeInstanceOf(HttpException);
+    expect(error.getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
+    expect(usersRepo.findOne).not.toHaveBeenCalled();
+    expect(sessions.create).not.toHaveBeenCalled();
   });
 });

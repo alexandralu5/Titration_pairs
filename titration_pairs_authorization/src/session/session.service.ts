@@ -1,7 +1,8 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
 import { AuthUser } from '../auth/auth-user';
+import { REDIS_CLIENT } from './redis.provider';
 
 /**
  * Хранилище активных сессий в Redis (stateful-аутентификация).
@@ -15,22 +16,14 @@ import { AuthUser } from '../auth/auth-user';
  * Удаление ключа (logout) мгновенно деавторизует пользователя.
  */
 @Injectable()
-export class SessionService implements OnModuleDestroy {
-  private readonly logger = new Logger(SessionService.name);
-  private readonly redis: Redis;
+export class SessionService {
   private readonly ttlSec: number;
 
-  constructor(config: ConfigService) {
+  constructor(
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    config: ConfigService,
+  ) {
     this.ttlSec = parseInt(config.get<string>('SESSION_TTL') || '3600', 10);
-    this.redis = new Redis({
-      host: config.get<string>('REDIS_HOST') || 'localhost',
-      port: parseInt(config.get<string>('REDIS_PORT') || '6379', 10),
-      // Если Redis недоступен, запрос падает с ошибкой, а не висит бесконечно
-      maxRetriesPerRequest: 2,
-    });
-    this.redis.on('error', (err) => {
-      this.logger.error(`Redis SessionStore error: ${err.message}`);
-    });
   }
 
   /** Время жизни сессии в секундах (кука живёт столько же). */
@@ -57,10 +50,6 @@ export class SessionService implements OnModuleDestroy {
   /** Удаляет сессию (logout). */
   async destroy(sessionId: string): Promise<void> {
     await this.redis.del(this.key(sessionId));
-  }
-
-  async onModuleDestroy(): Promise<void> {
-    await this.redis.quit();
   }
 
   private key(sessionId: string): string {

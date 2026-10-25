@@ -54,7 +54,9 @@ REDIS_PORT=6379
 SESSION_TTL=3600
 ```
 
-`SESSION_TTL` — время жизни сессии и куки в секундах. Необязательная `CORS_ORIGIN` —
+`SESSION_TTL` — время жизни сессии и куки в секундах. Необязательные `LOGIN_MAX_ATTEMPTS`
+(по умолчанию 5) и `LOGIN_BLOCK_SEC` (по умолчанию 900) задают лимит неудачных входов
+и время блокировки — см. раздел «Lua-скрипт в Redis». Необязательная `CORS_ORIGIN` —
 адреса фронтенда через запятую, которым разрешены запросы с кукой (по умолчанию
 `http://localhost:5173`).
 
@@ -149,6 +151,7 @@ SESSION_TTL=3600
 | `201` | Создание услуги (POST), лайк (POST), регистрация (POST) |
 | `400` | Невалидные данные или лишние поля в запросе |
 | `401` | Нет сессии: кука не передана, сессия истекла или пользователь вышел; неверный логин или пароль при входе |
+| `429` | Вход временно заблокирован: 5 неудачных попыток под этим логином за 15 минут |
 | `403` | Сессия есть, но действие разрешено только автору / модератору |
 | `404` | Записи нет, черновика нет, лента пуста, следующей записи в ленте нет |
 | `409` | Логин уже занят |
@@ -222,6 +225,7 @@ Set-Cookie: sessionId=2d5bb1ad-90a7-4303-ae29-c06e07b6a1e4; Max-Age=3600; Path=/
 ```
 
 Неверный логин и неверный пароль дают одинаковый ответ `401` — по ответу нельзя узнать, существует ли такой логин.
+После 5 неудачных попыток вход под этим логином блокируется на 15 минут: ответ `429` даже с верным паролем.
 
 **`POST /api/titration_pairs/users/logout`** — деавторизация: сессия удаляется из Redis, кука очищается. Ответ `200` и `{"id": 2}` — кто вышел. После выхода старая кука даёт `401`. Без сессии метод тоже отвечает `401`.
 
@@ -449,9 +453,11 @@ Redis нужен, потому что сессии нельзя держать �
 
 | Файл | Что делает |
 |------|------------|
+| `src/session/redis.provider.ts` | одно подключение к Redis на всё приложение |
 | `src/session/session.service.ts` | работа с Redis: `create()` — `SETEX`, `getUser()` — `GET`, `destroy()` — `DEL` |
-| `src/session/session.module.ts` | глобальный модуль с `SessionService` |
-| `src/auth/auth.service.ts` | `register()` (строка 31), `login()` (56), `logout()` (79), `getSessionUser()` (86) |
+| `src/session/login-attempts.service.ts` | Lua-скрипт и счётчик неудачных входов |
+| `src/session/session.module.ts` | глобальный модуль с `SessionService` и `LoginAttemptsService` |
+| `src/auth/auth.service.ts` | `register()` (строка 33), `login()` (60), `logout()` (90), `getSessionUser()` (97) |
 | `src/auth/users.controller.ts` | маршруты `/users`, `/users/login`, `/users/logout`; ставит и очищает куку |
 | `src/auth/guards/session.guard.ts` | `SessionGuard` (строка 11) и `OptionalSessionGuard` (строка 31) |
 | `src/auth/auth-user.ts` | тип `AuthUser` (`id`, `username`, `role`), имя куки и декоратор `@CurrentUser()` |
@@ -489,6 +495,55 @@ create(@Body() dto: CreateServiceDto, @CurrentUser() user: AuthUser, ...) {
 | 312 | `toFeedDto()` | признак `is_liked` в ленте; у гостя `0` |
 
 Клиент не может выдать себя за другого: `creator_id` в запросе не принимается (лишнее поле — `400`), он берётся только из сессии.
+
+### Lua-скрипт в Redis
+
+Redis умеет выполнять скрипты на языке Lua. Скрипт выполняется внутри Redis целиком и атомарно: пока он работает, никакая другая команда не выполняется. Поэтому несколько команд, которые должны идти вместе, объединяют в один скрипт.
+
+В проекте Lua-скрипт защищает вход от подбора пароля (`src/session/login-attempts.service.ts`):
+
+```lua
+local attempts = redis.call('INCR', KEYS[1])
+if attempts == 1 then
+  redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return attempts
+```
+
+- `KEYS[1]` — ключ счётчика `login_attempts:<логин>`, `ARGV[1]` — окно в секундах (900).
+- `INCR` увеличивает число неудачных попыток; на первой попытке `EXPIRE` задаёт ключу время жизни 15 минут.
+- Без Lua это две отдельные команды: если приложение упадёт между ними или два запроса придут одновременно, счётчик может остаться без времени жизни и заблокировать логин навсегда. Скрипт исключает это.
+
+Как это работает при входе (`AuthService.login`):
+
+1. Если в счётчике уже 5 попыток — ответ `429`, пароль даже не проверяется.
+2. Неверный логин или пароль — скрипт увеличивает счётчик, ответ `401`.
+3. Успешный вход — счётчик удаляется (`DEL`).
+
+Скрипт регистрируется в ioredis через `defineCommand`: библиотека загружает его в Redis и дальше вызывает по SHA1-хешу (`EVALSHA`), а если Redis скрипт ещё не знает — отправляет его текст (`EVAL`).
+
+Проверка в консоли Redis — после трёх неудачных входов под `admin`:
+
+```bash
+docker exec -it redis redis-cli
+> KEYS login_attempts:*
+1) "login_attempts:admin"
+> GET login_attempts:admin
+"3"
+> TTL login_attempts:admin
+(integer) 871
+```
+
+Тот же скрипт можно выполнить вручную командой `EVAL` — каждый вызов увеличивает счётчик:
+
+```bash
+> EVAL "local a = redis.call('INCR', KEYS[1]) if a == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end return a" 1 login_attempts:demo 900
+(integer) 1
+> EVAL "local a = redis.call('INCR', KEYS[1]) if a == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end return a" 1 login_attempts:demo 900
+(integer) 2
+> TTL login_attempts:demo
+(integer) 897
+```
 
 ### Роли
 
@@ -537,6 +592,8 @@ docker exec -it redis redis-cli
 
 После `POST /users/logout` ключ исчезает из `KEYS session:*`, а запрос со старой кукой получает `401`.
 
+7. **Lua-скрипт.** Трижды выполнить `POST /users/login` с неверным паролем, затем в консоли Redis `GET login_attempts:admin` — `"3"`, `TTL login_attempts:admin` — оставшиеся секунды блокировки. После пятой неудачной попытки вход отвечает `429`. Подробнее — в разделе «Lua-скрипт в Redis».
+
 ## Диаграмма последовательности
 
 Файл `titration_pairs-sequence.drawio` открывается в [draw.io](https://app.diagrams.net/). На диаграмме — все HTTP-запросы бизнес-процесса, без БД. Линии жизни — фронтенд и два домена, сообщения — методы доменов, в скобках ключевые входные и выходные данные.
@@ -577,7 +634,7 @@ src/
 │   ├── password.ts         хеширование паролей
 │   ├── guards/             SessionGuard, OptionalSessionGuard
 │   └── dto/                RegisterDto, LoginDto
-├── session/                SessionService — сессии в Redis
+├── session/                подключение к Redis, сессии, Lua-скрипт счётчика входов
 └── titration/entities/     Titration, User, Like
 views/                      grid, add, feed, login, register, profile (.hbs)
 public/                     стили и картинки-заглушки

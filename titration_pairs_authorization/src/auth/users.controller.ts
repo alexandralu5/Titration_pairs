@@ -7,6 +7,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiTags,
+  ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { Request, Response } from 'express';
@@ -42,11 +43,14 @@ export class UsersController {
   @HttpCode(200)
   @ApiOperation({
     summary: 'Аутентификация',
-    description: 'Проверяет логин и пароль, создаёт сессию в Redis и ставит HttpOnly-куку sessionId.',
+    description:
+      'Проверяет логин и пароль, создаёт сессию в Redis и ставит HttpOnly-куку sessionId. ' +
+      'После 5 неудачных попыток вход под этим логином блокируется на 15 минут.',
   })
   @ApiOkResponse({ type: UserDto, description: 'В заголовке Set-Cookie приходит sessionId' })
   @ApiBadRequestResponse({ description: 'Невалидные данные или лишние поля' })
   @ApiUnauthorizedResponse({ description: 'Неверный логин или пароль' })
+  @ApiTooManyRequestsResponse({ description: 'Слишком много неудачных попыток, вход временно заблокирован' })
   async login(
     @Body() dto: LoginDto,
     @Req() req: Request,

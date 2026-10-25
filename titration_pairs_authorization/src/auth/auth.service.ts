@@ -1,9 +1,10 @@
-import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpException, HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { User } from '../titration/entities/user.entity';
 import { SessionService } from '../session/session.service';
+import { LoginAttemptsService } from '../session/login-attempts.service';
 import { serializeUser, UserDto } from '../api/serializers';
 import { AuthUser, UserRole } from './auth-user';
 import { hashPassword, verifyPassword } from './password';
@@ -15,13 +16,14 @@ import { RegisterDto } from './dto/register.dto';
  *
  * Аутентификация сессионная (stateful): при входе создаётся запись в Redis
  * session:<sessionId> -> пользователь, клиенту уходит только sessionId в куке.
- * Исключения — без текстов, только со стандартным кодом (400, 401, 409).
+ * Исключения — без текстов, только со стандартным кодом (400, 401, 409, 429).
  */
 @Injectable()
 export class AuthService {
   constructor(
     @InjectRepository(User) private readonly usersRepo: Repository<User>,
     private readonly sessionService: SessionService,
+    private readonly loginAttempts: LoginAttemptsService,
   ) {}
 
   // ==========================================================================
@@ -51,17 +53,26 @@ export class AuthService {
   // ==========================================================================
   // Аутентификация: проверка логина/пароля и создание сессии в Redis.
   // Неверный логин и неверный пароль дают одинаковый ответ 401.
+  // После 5 неудачных попыток вход под логином блокируется на 15 минут (429);
+  // попытки считает Lua-скрипт в Redis (см. LoginAttemptsService).
   // POST /api/titration_pairs/users/login
   // ==========================================================================
   async login(dto: LoginDto): Promise<{ sessionId: string; user: UserDto }> {
+    const username = dto.username.trim();
+    if (await this.loginAttempts.isBlocked(username)) {
+      throw new HttpException('Too Many Requests', HttpStatus.TOO_MANY_REQUESTS);
+    }
+
     // password объявлен в сущности с select: false — запрашиваем его явно
     const user = await this.usersRepo.findOne({
-      where: { username: dto.username.trim() },
+      where: { username },
       select: { id: true, username: true, password: true, role: true, created_at: true },
     });
     if (!user || !(await verifyPassword(dto.password, user.password))) {
+      await this.loginAttempts.registerFailure(username);
       throw new UnauthorizedException();
     }
+    await this.loginAttempts.reset(username);
 
     const sessionId = randomUUID();
     await this.sessionService.create(sessionId, {

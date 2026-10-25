@@ -274,26 +274,30 @@ body.mobile-body {
   color: var(--bg-dark);
 }
 
-.media-preview-img {
-  width: 100px;
-  height: 100px;
-  object-fit: cover;
-  border-radius: 8px;
+/* Превью фото и видео на странице добавления (оба шага): во всю ширину
+   карточки и друг под другом. Фото обрезается по рамке, а видео
+   (вертикальное) показывается целиком; поля по бокам — тёмно-синие,
+   как шапка и нижняя панель навигации. */
+.media-preview-img,
+.media-preview-video {
+  width: 100%;
+  height: 280px;
+  border-radius: 12px;
   display: block;
   margin-bottom: 6px;
   cursor: pointer;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.media-preview-img {
+  object-fit: cover;
   border: 1px dashed #ccc;
 }
 
 .media-preview-video {
-  width: 75px;
-  height: 133px;
-  object-fit: cover;
-  border-radius: 8px;
-  display: block;
-  margin-bottom: 6px;
-  background: #000;
-  cursor: pointer;
+  object-fit: contain;
+  background: var(--bg-dark);
 }
 
 /* Заглушка медиа на шаге 1: показывается, но заменить её нельзя */
