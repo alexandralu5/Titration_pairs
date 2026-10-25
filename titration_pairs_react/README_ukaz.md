@@ -1,0 +1,1789 @@
+# Методические указания по выполнению лабораторной работы №5
+
+**Цель лабораторной работы** - разработка базового приложения на React, знакомство с жизненным циклом приложения и хуками.
+
+**Если у вас возникают сложности с выполнением данной лабораторной работы или недостаточно знаний по JavaScript рекомендуем посмотреть [курс][iu5-javascript].**
+
+## План работы
+
+1. Введение
+2. React 
+   - 2.1. Component
+   - 2.2. Element
+   - 2.3. Props
+   - 2.4. State
+3. Создание проекта
+4. Роутинг
+5. Хуки
+   - 5.1. Хук состояния
+   - 5.2. Жизненный цикл
+   - 5.3. Хук эффекта
+6. Реальная практика - iTunes
+   - 6.1. Страница албомов iTunes
+   - 6.2. Делим страницу на компоненты 
+   - 6.3. Мобильная вёрстка, таб-панель и страница Подробнее
+7. Доработка React приложения по варианту
+   - 7.1. Реализовать получение данных из mock-объектов
+   - 7.2. Добавим дефолтное изображение
+   - 7.3. Нижняя таб-панель навигации
+   - 7.4. Подключение к собственному API из web-сервиса
+8. Важный момент. CORS
+9. Полезные ссылки
+
+
+## 1. Введение
+
+<!-- TODO: ссылка на установку VM -->
+
+<!-- TODO: ссылка на настройку IDE -->
+
+### Как жить с API
+
+В предыдущей лабораторной работе мы создали наш сервер на Django REST Framework и написали API.
+Теперь попробуем написать сайт, который будет работать с нашим API.
+
+До этого мы использовали Django шаблоны, чтобы показать пользователю интерфейс и отобразить данные, но сейчас так сделать не получится. Когда мы использовали Django шаблоны, то у нас сервер выступал в роли бекенда и фронтенда сразу, то есть в нем была реализовано бизнес логика по работе с данными (бекенд) и шаблонизатор для отдачи html (фронтенд).
+
+Сейчас же нас сервер выступает в роли бекенда, который нам просто отдает данные, нам нужно написать приложение, которое будет уметь получать эти данные и выводить пользователю. У нас будет 2 независимых приложения. Бекенд на Django REST и фронтенд на JavaScript.
+
+### Что такое TypeScript
+
+TypeScript - это типизированный JavaScript. При написании кода на JavaScript мы сталкиваемся с проблемой, что у нас динамическая типизация. Это значит, что мы сможем узнать об ошибке только в момент выполнения программы. TypeScript призван решить эту проблему, потому что мы будем писать типы в нашем коде, и ошибку мы получим на этапе сборки приложения. Подробнее что такое TypeScript и какие там есть типы можно почитать в [статье][habr-typescript].
+
+### Что такое JSX/TSX
+
+JSX — расширение синтаксиса JavaScript. Этот синтаксис выглядит как язык шаблонов, но наделён всеми языковыми возможностями JavaScript. В результате компиляции JSX возникают простые объекты — «React-элементы». Подробнее про JSX можно почитать в [статье][habr-react-jsx]. TSX - это JSX только на языке TypeScript.
+
+React DOM использует стиль именования camelCase для свойств вместо обычных имён HTML-атрибутов. Например, в JSX атрибут `tabindex` станет `tabIndex`. В то время как атрибут `class` записывается как `className`, поскольку слово `class` уже зарезервировано в JavaScript.
+
+## 2. React
+
+React-разработка заключается в описании того, что нужно вывести на страницу (а не в составлении инструкций для браузера, посвящённых тому, как это делать). Это, кроме прочего, означает значительное сокращение объёмов шаблонного кода.
+
+### 2.1. Component
+
+React-компоненты — это повторно используемые части кода, которые возвращают React-элементы для отображения на странице. Самый простой React-компонент — это простая функция JavaScript, которая возвращает элементы React.
+
+```tsx
+import { FC } from 'react'
+
+const Welcome: FC = () => {
+  return <h1>Привет, Мир</h1>;
+}
+```
+
+Компоненты могут быть классами ES6.
+
+```tsx
+import React from 'react'
+
+class Welcome extends React.Component {
+  render() {
+    return <h1>Привет, Мир</h1>;
+  }
+}
+```
+
+На данный момент в разработке предпочитают использовать функциональные компоненты. Подробнее о том, как они работают и чем отличаются от классовых можно узнать в [этой статье][habr-react-diff-class-function-component]. В данной лабораторной работе мы будем рассматривать **только функциональные компоненты**.
+
+Компоненты могут состоять из других компонентов, так что по сути целая страница может считаться компонентом.
+
+### 2.2. Element
+
+React-элементы — это составляющие блоки React-приложений. Их можно перепутать с более известной концепцией «компонентов», но в отличие от компонента, элемент описывает то, что вы хотите увидеть на экране. React-элементы иммутабельны.
+
+В стандартном React-приложении состояние является объектом. Процесс согласования (reconciliation process) в React определяет, необходимо ли производить повторный рендеринг объекта, поэтому ему нужно следить за изменениями этого объекта.
+
+Другими словами, если React не сможет определить изменение объекта, он не обновит виртуальный DOM.
+
+Иммутабельность позволяет наблюдать за такими изменениями. Это, в свою очередь, позволяет React сравнивать старое и новое состояния объекта и на основе этого сравнения перерисовывать объект.
+
+### 2.3. Props
+
+`props` (пропсы) — это входные данные React-компонентов, передаваемые от родительского компонента дочернему компоненту.
+
+Пример простого компонента `Text` с пропсом.
+
+```tsx
+import { FC } from 'react'
+
+interface Props {
+  name: string
+}
+
+const Text: FC<Props> = (props) => {
+    return <h1>Привет, {props.name}</h1>;
+}
+```
+
+Этот компонент используется на главной странице, куда передаем название текста.
+
+```tsx
+import { FC } from 'react'
+
+const MainPage: FC = () => {
+  return <Text name='Мир'/>
+}
+```
+
+Пропсы предназначены для чтения. Если требуется изменять данные, то необходимо использовать state (состояние приложения).
+
+В любом компоненте доступны `props.children`. Это контент между открывающим и закрывающим тегом компонента. Например:
+
+```tsx
+<React.StrictMode>
+  <App />
+</React.StrictMode>
+```
+
+Для `React.StrictMode` в **children** попадает компонент `App`.
+
+### 2.4. State
+
+Компонент нуждается в `state`, когда данные в нём со временем изменяются. Например, компоненту `Checkbox` может понадобиться состояние `isChecked`. Рассмотрим пример такого компонента.
+
+```tsx
+import { FC, useState } from 'react'
+
+const Checkbox: FC = () => {
+    const [isChecked, setIsChecked] = useState<boolean>(false)
+
+    return <h1 onClick={() => setIsChecked((state) => !state)}>Состояние: ${isChecked}</h1>;
+}
+```
+
+Разница между пропсами и состоянием заключается в основном в том, что состояние нужно для управления компонентом, а пропсы для получения информации.
+
+Если возникла необходимость изменять пропсы, то нужно вынести их в состояние родительского компонента и пробрасывать в текущий компонент не только этот объект, но и функцию, которая изменит его.
+
+Прежде чем перейти к примеру работы с состоянием, ознакомимся с жизненным циклом приложения.
+
+## 3. Создание проекта
+
+Для разработки мы будем использовать шаблон [Vite React TS][vite-template-project] - это удобная среда для создания первого простого приложения на **React**.
+
+Для создания первого проекта выполняем следующее.
+
+```shell
+npm create vite@latest my-app -- --template react-ts
+cd my-app
+npm install
+```
+
+После выполнения этих команд у нас будет готовое приложение. "Под капотом" нашего приложения используется язык [Typescript], библиотека [React] и сборщик [Vite].
+
+Для удобства разработки внесем изменения в `vite.config.ts`, чтобы у нас всегда локальный сервер запускался на **3000 порту**.
+
+```ts
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  server: { port: 3000 },
+  plugins: [react()],
+})
+```
+
+Для работы с приложением у нас есть 2 основные команды:
+
+* `npm run dev` - запуск локального сервера для разработки
+* `npm run build` - создание оптимизированной сборки приложения
+
+Выполним команду `npm run dev`, чтобы запустить локальный сервер для разработки. Страница автоматически перезагрузиться, если вы внесете изменения в код. Вы сможете увидеть ошибки сборки и предупреждения в консоли.
+
+![Фото 1](./assets/1.png)
+
+## Структура проекта
+
+В папке проекта у нас будут следующие файлы:
+
+* `package.json` - основной файл с информацией о проекте
+* `package-lock.json` - лок файл со списком зависимостей
+* `vite.config.ts` - конфигурационный файл сборщика Vite
+* `tsconfig.json` - конфигурационный файл TypeScript
+* `tsconfig.node.json` - конфигурационный файл TypeScript при запуске на Node
+* `.eslintrc.cjs` - конфигурационный файл Eslint
+* `index.html` - основной файл нашего приложения. Он будет первым загружаться, когда пользователь заходит на страницу
+* `src/main.tsx` - основной TS файл нашего приложения. Тут мы запускаем отрисовку приложения
+* `src/App.tsx` - верстка приложения. Логотип Vite и React
+
+![Фото 2](./assets/2.png)
+
+Рассмотрим поподробнее основные файлы нашего приложения.
+
+### index.html
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vite + React + TS</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+```
+
+Файл `index.html` первым загружается при стартпе приложения у пользователя. Рассмотрим основные части:
+
+* `link` - загрузка иконки вкладки в браузере
+* `title` - название вкладки в браузере
+* `meta` - установка технической информации
+* `script` - подключение основного TS файла нашего проекта. Когда он загрузится, то начнет исполнятся и нарисует логотипы Vite и React
+* `div id=root` - технический тег. В него React будет вставлять код приложения
+
+### src/main.tsx
+
+```tsx
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App.tsx'
+import './index.css'
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+)
+```
+
+Файл `src/main.tsx` загружается с нашего html файла и после исполнения начнет рендерить наше приложение. Рассмотрим основные части:
+
+* `document.getElementById('root')` - получение технического тега из `index.html` файла
+* `React.StrictMode` - инструмент для обнаружения потенциальных проблем в приложении
+
+### src/App.tsx
+
+```tsx
+import { useState } from 'react'
+import reactLogo from './assets/react.svg'
+import viteLogo from '/vite.svg'
+import './App.css'
+
+function App() {
+  const [count, setCount] = useState(0)
+
+  return (
+    <>
+      <div>
+        <a href="https://vitejs.dev" target="_blank">
+          <img src={viteLogo} className="logo" alt="Vite logo" />
+        </a>
+        <a href="https://react.dev" target="_blank">
+          <img src={reactLogo} className="logo react" alt="React logo" />
+        </a>
+      </div>
+      <h1>Vite + React</h1>
+      <div className="card">
+        <button onClick={() => setCount((count) => count + 1)}>
+          count is {count}
+        </button>
+        <p>
+          Edit <code>src/App.tsx</code> and save to test HMR
+        </p>
+      </div>
+      <p className="read-the-docs">
+        Click on the Vite and React logos to learn more
+      </p>
+    </>
+  )
+}
+
+export default App
+```
+
+Это основной компонент нашего приложения. В нем происходит отрисовка логотипов Vite и React.
+
+## 4. Роутинг
+
+Вне зависимости от выбранной предметной области нашего приложение может состоять из нескольких страниц. Для удобного перехода между страницами будет использовать роутинг.
+
+Для этого нам необходимо установить библиотеки `react-router-dom`, `@types/react-router-dom`
+
+```shell
+npm i react-router-dom
+npm i @types/react-router-dom -D
+```
+
+Сделаем так, чтобы в `main.tsx` у нас было несколько страниц.
+
+```tsx
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+
+import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import './index.css'
+
+const router = createBrowserRouter([
+  {
+    path: '/',
+    element: <h1>Это наша стартовая страница</h1>
+  },
+  {
+    path: '/new',
+    element: <h1>Это наша страница с чем-то новеньким</h1>
+  }
+])
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <RouterProvider router={router} />
+  </React.StrictMode>,
+)
+```
+
+### Главная страница
+
+![Фото 3](./assets/3.png)
+
+### Страница `/new`
+
+![Фото 4](./assets/4.png)
+
+Роутер позволяет нам перемещаться между разными страницами без перезагрузки. Для этого можно использовать стандартный тег `a`.
+
+```tsx
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { createBrowserRouter, RouterProvider, Link } from 'react-router-dom'
+import './index.css'
+
+const router = createBrowserRouter([
+  {
+    path: '/',
+    element: <h1>Это наша стартовая страница</h1>
+  },
+  {
+    path: '/new',
+    element: <h1>Это наша страница с чем-то новеньким</h1>
+  }
+])
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <ul>
+      <li>
+        <a href="/">Старт</a>
+      </li>
+      <li>
+        <a href="/new">Хочу на страницу с чем-то новеньким</a>
+      </li>
+    </ul>
+    <hr />
+    <RouterProvider router={router} />
+  </React.StrictMode>,
+)
+```
+
+### Финальный результат
+
+![Gif 1](./assets/1.gif)
+
+Теперь вы знакомы с роутингом в приложении. Если потребуется обрабатывать какую-то информацию из адресной строки или использовать какой-то **особый роутер**, то подробнее о типах и работе роутеров можно ознакомиться в документации React или же на сайте [React Router][react-router] с готовыми примерами.
+
+## 5. Хуки
+
+Хуки — нововведение в React 16.8, которое позволяет использовать состояние и другие возможности React без написания классов.
+
+Хук - функция, которая позволяет добавлять пользовательскую логику в события жизненного цикла приложения. **Они не будут работать в классовых компонентах!**
+
+### 5.1. Хук состояния
+
+Допустим, мы хотим инициализировать в классе состояние `count` значением `0`. Для этого в его конструкторе присваиваем `this.state` объект `{ count: 0 }`:
+
+```tsx
+import React from 'react'
+
+class Example extends React.Component {
+    constructor() {
+        this.state = {
+            count: 0
+        };
+    }
+}
+```
+
+В функциональном компоненте нам недоступен `this`, поэтому мы не можем задать или считать состояние через `this.state`. Вместо этого мы вызываем хук `useState` напрямую изнутри нашего компонента.
+
+```tsx
+import { FC, useState } from 'react'
+
+const Example: FC = () => {
+    // Объявление новой переменной состояния «count»
+    const [count, setCount] = useState(0);
+
+    return <div onClick={()=>setCount(count=>count++)}>{count}</div>
+}
+```
+
+## 5.2. Жизненный цикл
+
+Давайте рассмотрим каждый жизненный этап, включая методы, с ними связанные. В примере будут рассмотрены методы классового компонента, потому что в функциональных компонентах используется концепция хуков, о которых будет рассказано позднее.
+
+### Монтирование
+
+Классовые компоненты тоже являются классами,  так что в первую очередь будет вызван `constructor()`. В нем мы выполняем инициализацию состояния компонента.
+
+Далее компонент запускает `getDerivedStateFromProps()`, потом запускается `render()`, возвращающий JSX. React «монтируется» в DOM.
+
+Затем происходит запуск метода `componentDidMount()`, в котором выполняются все асинхронные процессы, описанные разработчиком. После этого компонент можно считать успешно "рожденным".
+
+### Обновление
+
+Данный этап запускается во время каждого изменения состояния либо свойств. Как и в случае с монтированием, происходит вызов метода `getDerivedStateFromProps()`, однако в этот раз уже без конструктора. Потом происходит запуск `shouldComponentUpdate()`.
+
+В `shouldComponentUpdate()` можно сравнить состояния **до** и **после**, чтобы лишний раз не перерисовывать компонент.
+
+Потом React запустит `componentDidUpdate()`. Как и в случае с `componentDidMount()`, его можно применять для асинхронных вызовов либо управления DOM.
+
+### Размонтирование
+
+Когда компонент прожил свою жизнь, наступает размонтирование — последний жизненный этап. React выполняет запуск `componentWillUnmount()` непосредственно перед удалением из DOM. Данный метод применяется при закрытии всех открытых соединений типа web-сокетов либо тайм-аутов.
+
+### 5.3. Хук эффекта
+
+С помощью хука эффекта `useEffect` вы можете выполнять побочные эффекты из функционального компонента. Он выполняет ту же роль, что и `componentDidMount`, `componentDidUpdate` и `componentWillUnmount` в React-классах, объединив их в единый API: предоставляет методы для работы с жизненным циклом функциональных компонентов. Вы можете найти сравнение `useEffect` и этих методов на странице [использование хука эффекта][react-hooks].
+
+```tsx
+useEffect(() => {
+  // Этот код выполнится на mount`е компонента
+    
+  return () => {
+    // Этот код выполнится на unmount`е компонента
+  }
+
+  // Это список зависимостей хука, он будет вызван каждый раз, когда зависимости будут меняться
+}, [])
+```
+
+Хуки налагают два дополнительных правила для разработки:
+
+* Не вызывайте хуки внутри циклов, условий или вложенных функций.
+  Они должны выполняться только **на верхнем уровне**.
+* Хуки следует вызывать только из функциональных компонентов React и пользовательских хуков.
+
+Пользовательский хук это такая функция JavaScript, внутри которой используются другие хуки. На этот хук распространяются правила хуков, которые описаны ранее.
+
+В [этой статье][habr-react-hooks] можно посмотреть на классные реализации полезных в разработке пользовательских хуков.
+
+### Практика по useState и useEffect
+
+Создадим функциональный компонент на примере котором сможем наблюдать работу с состоянием и жизненным циклом приложения.
+
+```tsx
+import { FC, useEffect, useState } from 'react'
+
+const data: string[] = [
+    'Берик Дондаррион',
+    'Леди Мелиссандра',
+    'Полливер',
+    'Уолдер Фрей',
+    'Тайвин Ланнистер',
+    'Сир Мерин Трэнт',
+    'Король Джоффри',
+    'Сир Илин Пейн',
+    'Гора',
+    'Пес',
+    'Серсея Ланнистер',
+]
+
+const StartPage: FC = () => {
+    // В функциональных компонентах для работы с состоянием можно использовать хук useState()
+    // Он возвращает кортеж из двух элементов:
+    // 1 элемент - объект состояния
+    // 2 элемент - метод который позволит нам обновить состояние
+    const [randomName, setRandomName] = useState('')
+
+    // Кстати, это хороший пример деструктуризации массива в JavaScript
+    const [names, setNames] = useState(data)
+
+    const [showNames, setShowNames] = useState(false)
+
+    // В данном хендлере мы изменяем состояние на какое-то конкретное
+    const handleShowNames = () => {
+        setShowNames(true)
+    }
+
+    // В данном хендлере мы изменяем состояние на какое-то конкретное
+    const handleHideNames = () => {
+        setShowNames(false)
+    }
+
+    useEffect(()=>{
+        console.log('Этот код выполняется только на первом рендере компонента')
+        // В данном примере можно наблюдать Spread syntax (Троеточие перед массивом)
+        setNames((names) => [...names, 'Бедный студент'])
+
+        return () => {
+            console.log('Этот код выполняется, когда компонент будет размонтирован')
+        }
+    },[])
+
+    useEffect(()=>{
+        console.log('Этот код выполняется каждый раз, когда изменится состояние showNames')
+        setRandomName(names[Math.floor(Math.random()*names.length)])
+    },[showNames])
+
+    return (
+        <div>
+            <h3>Случайное имя из списка: {randomName}</h3>
+            {/*Кнопка для того, чтобы показать имена*/}
+            <button onClick={handleShowNames}>Хочу увидеть список имен</button>
+            {/*Кнопка для того, чтобы скрыть имена*/}
+            <button onClick={handleHideNames}>Хочу скрыть список имен</button>
+
+            {/*React отрисует список только если showNames будет равен true, boolean значения игнорируются при отрисовке*/}
+            {showNames && (
+                <ul>
+                    {names.map((name, index)=> (
+                        <li key={index}>
+                            <span>{name}</span>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    )
+}
+
+export default StartPage
+```
+
+![Gif 2](./assets/2.gif)
+
+## 6. Реальная практика - iTunes
+
+Предположим, у нас уже есть рабочий API (В примере используется API ITunes). Мы можем получить список сущностей, отфильтровать их и вывести в понятном виде пользователю.
+
+В этой лабораторной интерфейс сразу проектируется под **вертикальный экран телефона**: в браузере на компьютере приложение отображается узкой колонкой фиксированной ширины по центру. Мы **не** добавляем медиазапросы и адаптивную вёрстку под разные разрешения — только мобильный макет.
+
+### 6.1. Страница албомов iTunes
+
+Для этого нам необходимо установить библиотеку `react-bootstrap` и `bootstrap`.
+
+```shell
+npm i react-bootstrap bootstrap
+```
+
+`bootstrap` необходимо испортировать в файле `main.tsx`
+
+```tsx
+import 'bootstrap/dist/css/bootstrap.min.css'
+```
+
+Создадим страницу для отрисовки треков из ITunes. На этом шаге карточки выводим **в один столбец** — так удобнее на узком экране телефона. Общую оболочку приложения и нижнюю таб-панель добавим в п. 6.3.
+
+### ITunesPage
+
+#### ITunesPage.css
+
+Контейнер страницы — вертикальный flex-блок с отступами. Класс `.cardsList` (добавим в п. 6.2) складывает карточки друг под другом с промежутком между ними.
+
+```css
+.container {
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    gap: 12px;
+}
+.containerLoading {
+    filter: blur(8px);
+}
+
+.cardsList {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+```
+
+#### ITunesPage.tsx
+
+Запрос к API iTunes возвращает массив `results`. Мы оставляем только элементы с `wrapperType === "track"` — отдельные треки. У каждого трека в ответе API есть обложка `artworkUrl100` (статичное изображение 100×100). Поле `previewUrl` — ссылка на короткий аудиофрагмент трека; на странице «Подробнее» (п. 6.3) именно оно будет воспроизводиться в `<video>`.
+
+```tsx
+import { FC, useState} from 'react'
+import { Card, Button, Spinner } from 'react-bootstrap'
+import './ITunesPage.css'
+
+interface ITunesMusic {
+    wrapperType: string
+    artworkUrl100: string
+    artistName: string
+    collectionCensoredName: string
+    trackViewUrl: string
+    trackId: number
+    previewUrl?: string
+}
+
+interface ITunesResult {
+    resultCount: number
+    results: ITunesMusic[]
+}
+
+const getMusicByName = async (name = ''): Promise<ITunesResult> =>{
+    return fetch(`https://itunes.apple.com/search?term=${name}`)
+        .then((response) => response.json())
+        .catch(()=> ({ resultCount:0, results:[] }))
+}
+
+const ITunesPage: FC = () => {
+    const [searchValue, setSearchValue] = useState('')
+
+    const [loading, setLoading] = useState(false)
+
+    const [music, setMusic] = useState<ITunesMusic[]>([])
+
+    const handleSearch = async () =>{
+        setLoading(true)
+        const { results } = await getMusicByName(searchValue)
+        setMusic(results.filter(item => item.wrapperType === "track"))
+        setLoading(false)
+    }
+
+    return (
+        <div className={`container ${loading && 'containerLoading'}`}>
+            {loading && <div className="loadingBg"><Spinner animation="border"/></div>}
+
+            <div className="inputField">
+                <input value={searchValue} onChange={(event => setSearchValue(event.target.value))}/>
+                <Button disabled={loading} onClick={handleSearch}>Искать</Button>
+            </div>
+
+            {!music.length && <div>
+                <h1>К сожалению, пока ничего не найдено :(</h1>
+            </div>}
+
+            <div className="cardsList">
+                {music.map((item)=> (
+                    <Card key={item.trackId} className="card">
+                        <Card.Img className="cardImage" variant="top" src={item.artworkUrl100} height={100} width={100}  />
+                        <Card.Body>
+                            <div className="textStyle">
+                                <Card.Title>{item.artistName}</Card.Title>
+                            </div>
+                            <div className="textStyle">
+                                <Card.Text>
+                                    {item.collectionCensoredName}
+                                </Card.Text>
+                            </div>
+                        </Card.Body>
+                    </Card>
+                ))}
+            </div>
+        </div>
+    )
+}
+
+export default ITunesPage
+```
+
+На этом этапе карточки только отображают данные. Переход на страницу «Подробнее» и воспроизведение превью добавим в п. 6.3.
+
+![Gif 3](assets/3.gif)
+
+### 6.2. Делим страницу на компоненты
+
+Для того, чтобы в будущем было удобнее разрабатывать, стоит разделять страницу на компоненты и выносить логику в отдельные файлы.
+
+На данном этапе у нас много кода в одном файле. Вынесем в директорию `components` карточку и поле ввода. Работу с сетью вынесем в директорию `modules`. Интерфейс `ITunesMusic` дополним полями `trackId` и `previewUrl` — они понадобятся для навигации и страницы «Подробнее».
+
+### components/InputField
+
+#### InputField.css
+
+```css
+.inputField {
+    display: flex;
+    padding: 12px 0;
+}
+.inputField > input {
+    width: 200px;
+    margin-right: 12px;
+    border: 2px solid black;
+    border-radius: 4px;
+    outline: none;
+}
+```
+
+#### InputField.tsx
+
+```tsx
+import { FC } from 'react'
+import { Button } from 'react-bootstrap'
+import './InputField.css'
+
+interface Props {
+    value: string
+    setValue: (value: string) => void
+    onSubmit: () => void
+    loading?: boolean
+    placeholder?: string
+    buttonTitle?: string
+}
+
+const InputField: FC<Props> = ({ value, setValue, onSubmit, loading, placeholder, buttonTitle = 'Искать' }) => (
+    <div className="inputField">
+        <input value={value} placeholder={placeholder} onChange={(event => setValue(event.target.value))}/>
+        <Button disabled={loading} onClick={onSubmit}>{buttonTitle}</Button>
+    </div>
+)
+
+export default InputField
+export { InputField }
+```
+
+Компонент экспортируем и как `default`, и как именованный экспорт — так его удобнее импортировать из других файлов.
+
+### components/MusicCard
+
+#### MusicCard.css
+
+```css
+.card {
+    padding: 8px;
+}
+.loadingBg {
+    z-index: 999;
+    position: fixed;
+    height: 100%;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.textStyle {
+    height:48px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    margin-bottom:12px;
+}
+.cardImage {
+    object-fit: contain;
+}
+.cardButton {
+    width: 100%;
+}
+```
+
+#### MusicCard.tsx
+
+Карточка показывает обложку, название альбома и исполнителя. В п. 6.3 сделаем всю карточку кликабельной — по нажатию откроется страница «Подробнее».
+
+```tsx
+import { FC } from 'react'
+import { Card } from 'react-bootstrap'
+import './MusicCard.css'
+
+interface Props {
+    artworkUrl100: string
+    artistName: string
+    collectionCensoredName: string
+}
+
+const MusicCard: FC<Props> = ({ artworkUrl100, artistName, collectionCensoredName }) => (
+    <Card className="card">
+        <Card.Img className="cardImage" variant="top" src={artworkUrl100} height={100} width={100}  />
+        <Card.Body>            
+            <div className="textStyle">
+                <Card.Title>{collectionCensoredName}</Card.Title>
+            </div>
+            <div className="textStyle">
+                <Card.Text>
+                    {artistName}
+                </Card.Text>
+            </div>
+        </Card.Body>
+    </Card>
+)
+
+export default MusicCard;
+```
+
+### modules/itunesApi.ts
+
+Типы и функция поиска вынесены в отдельный модуль. Поле `trackId` — уникальный числовой идентификатор трека в каталоге iTunes; по нему мы будем строить адрес страницы «Подробнее» (`/detail/1441163401`). Поле `previewUrl` — URL короткого аудиопревью (~30 секунд), который API отдаёт вместе с остальными полями трека.
+
+```ts
+export interface ITunesMusic {
+    wrapperType: string
+    artworkUrl100: string
+    artistName: string
+    collectionCensoredName: string
+    trackViewUrl: string
+    trackId: number
+    previewUrl?: string
+}
+
+export interface ITunesResult {
+    resultCount: number
+    results: ITunesMusic[]
+}
+
+export const getMusicByName = async (name = ''): Promise<ITunesResult> =>{
+    return fetch(`https://itunes.apple.com/search?term=${name}`)
+        .then((response) => response.json())
+        .catch(()=> ({ resultCount:0, results:[] }))
+}
+```
+
+### ITunesPage.tsx
+
+Страница использует вынесенные компоненты. После успешного поиска массив треков сохраняется в локальный `state` и отрисовывается в `.cardsList` — один столбец карточек.
+
+```tsx
+import { FC, useState} from 'react'
+import { Spinner } from 'react-bootstrap'
+import { ITunesMusic, getMusicByName } from './modules/itunesApi'
+import { InputField } from './components/InputField'
+import { MusicCard } from './components/MusicCard'
+import './ITunesPage.css'
+
+const ITunesPage: FC = () => {
+    const [searchValue, setSearchValue] = useState('')
+    const [loading, setLoading] = useState(false)
+    const [music, setMusic] = useState<ITunesMusic[]>([])
+
+    const handleSearch = async () =>{
+        setLoading(true)
+        const { results } = await getMusicByName(searchValue)
+        setMusic(results.filter(item => item.wrapperType === "track"))
+        setLoading(false)
+    }
+
+    return (
+        <div className={`container ${loading && 'containerLoading'}`}>
+            {loading && <div className="loadingBg"><Spinner animation="border"/></div>}
+
+            <InputField
+                value={searchValue}
+                setValue={(value) => setSearchValue(value)}
+                loading={loading}
+                onSubmit={handleSearch}
+            />
+
+            {!music.length && <div>
+                <h1>К сожалению, пока ничего не найдено :(</h1>
+            </div>}
+
+            <div className="cardsList">
+                {music.map((item)=> (
+                    <MusicCard key={item.trackId} {...item} />
+                ))}
+            </div>
+        </div>
+    )
+}
+
+export default ITunesPage
+```
+
+В итоге у нас получилось приложение для поиска музыки в ITunes. В этом приложении мы использовали функциональные компоненты, хуки состояния и запросы к внешнему API.
+
+
+
+### 6.3. Мобильная вёрстка, таб-панель и страница Подробнее
+
+На предыдущих шагах мы выводили только **статичные обложки** (`artworkUrl100`) в списке карточек. Теперь добавим вторую страницу — **Подробнее** — в вертикальном формате, как в TikTok: медиа на весь экран, текст поверх, кнопка «Далее». Навигация между экранами — через **нижнюю таб-панель**, как в мобильных приложениях.
+
+**Откуда берётся «видео» на странице Подробнее**
+
+Тот же API iTunes, что и для поиска (`https://itunes.apple.com/search`), для каждого трека в ответе JSON отдаёт поле **`previewUrl`** — прямую ссылку на короткий аудиофрагмент трека (обычно около 30 секунд). Это не полноценный клип, а превью из каталога Apple. Мы подставляем этот URL в тег `<video>`: браузер воспроизводит превью на фоне страницы. Атрибуты `autoPlay`, `loop`, `muted` и `playsInline` нужны, чтобы автозапуск работал в мобильных браузерах (без звука по умолчанию).
+
+Если у трека нет `previewUrl` (так бывает у mock-данных или у части записей API), вместо `<video>` показываем **обложку** `artworkUrl100` или изображение по умолчанию — так же, как раньше отображались только фото.
+
+**Идентификатор трека `trackId`**
+
+В URL страницы «Подробнее» используется **`trackId`** — уникальный числовой идентификатор трека в iTunes (например, `/detail/1441163401`). Это не порядковый номер в списке и не «id + 1»: номера треков в каталоге произвольные и с пропусками. Для загрузки одного трека по id есть отдельный запрос `https://itunes.apple.com/lookup?id=...`.
+
+**Поведение навигации**
+
+- вкладка **Список** (`/`) — поиск и карточки в один столбец;
+- **клик по карточке** — переход на `/detail/:trackId` выбранного трека;
+- вкладка **Подробнее** в таб-панели — открывает **первую** карточку из текущего списка результатов (если список пуст, переход не выполняется);
+- кнопка **Далее** на странице Подробнее — переход к **следующей** карточке **по порядку в том списке**, который вернул последний поиск (массив `cards`). Мы находим индекс текущего `trackId` в этом массиве и переходим на `trackId` следующего элемента. Это не арифметика «текущий id + 1»: если следующего элемента в списке нет (вы на последней карточке), кнопка ничего не делает;
+- список карточек хранится в родительском layout и передаётся дочерним страницам через **`Outlet` context** React Router (не путать с `React.createContext` — в этой лабораторной `React Context` не используем).
+
+Создадим общую обёртку приложения, таб-панель, страницу Подробнее и обновим роутинг.
+
+#### Routes.tsx
+
+Константы маршрутов и подписи для таб-панели.
+
+```ts
+export const ROUTES = {
+  LIST: "/",
+  DETAIL: "/detail",
+}
+export type RouteKeyType = keyof typeof ROUTES;
+export const ROUTE_LABELS: { [key in RouteKeyType]: string } = {
+  LIST: "Список",
+  DETAIL: "Подробнее",
+};
+```
+
+#### MobileApp.css
+
+Обёртка `appShell` фиксирует ширину под телефон (390px) и центрирует приложение в окне браузера на компьютере. Нижний отступ у контента — чтобы таб-панель не перекрывала прокрутку.
+
+```css
+body {
+    margin: 0;
+    background: #f0f0f0;
+}
+
+.appShell {
+    max-width: 390px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    box-shadow: 0 0 24px rgba(0, 0, 0, 0.12);
+}
+
+.appContent {
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: 64px;
+}
+```
+
+#### AppLayout.tsx
+
+Здесь живёт **общий список карточек** `cards`. После каждого поиска страница списка обновляет его через `setCards`. Страница «Подробнее» читает тот же массив — поэтому кнопка «Далее» знает порядок карточек. `Outlet` с `context={{ cards, setCards }}` передаёт эти данные вложенным маршрутам без Redux и без React Context.
+
+```tsx
+import { FC, useState } from "react";
+import { Outlet } from "react-router-dom";
+import { ITunesMusic } from "./modules/itunesApi";
+import { TabBar } from "./components/TabBar";
+import "./MobileApp.css";
+
+export interface AppOutletContext {
+  cards: ITunesMusic[];
+  setCards: (cards: ITunesMusic[]) => void;
+}
+
+export const AppLayout: FC = () => {
+  const [cards, setCards] = useState<ITunesMusic[]>([]);
+
+  return (
+    <div className="appShell">
+      <main className="appContent">
+        <Outlet context={{ cards, setCards }} />
+      </main>
+      <TabBar cards={cards} />
+    </div>
+  );
+};
+```
+
+#### TabBar.tsx и TabBar.css
+
+Таб-панель закреплена внизу экрана. Активная вкладка подсвечивается классом `tabBarItemActive` — сравниваем `location.pathname` с маршрутами.
+
+При нажатии **Список** вызывается `navigate("/")`.
+
+При нажатии **Подробнее** берётся `trackId` **первой** карточки в `cards` и выполняется переход на `/detail/{trackId}`. Если пользователь ещё ничего не искал и `cards` пуст, кнопка не сработает.
+
+```tsx
+import "./TabBar.css";
+import { FC } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { ROUTES, ROUTE_LABELS } from "../Routes";
+import { ITunesMusic } from "../modules/itunesApi";
+
+interface Props {
+  cards: ITunesMusic[];
+}
+
+export const TabBar: FC<Props> = ({ cards }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const isList = location.pathname === ROUTES.LIST;
+  const isDetail = location.pathname.startsWith(ROUTES.DETAIL);
+
+  const goToList = () => navigate(ROUTES.LIST);
+
+  const goToDetail = () => {
+    const firstId = cards[0]?.trackId;
+    if (firstId) {
+      navigate(`${ROUTES.DETAIL}/${firstId}`);
+    }
+  };
+
+  return (
+    <nav className="tabBar">
+      <button
+        type="button"
+        className={`tabBarItem ${isList ? "tabBarItemActive" : ""}`}
+        onClick={goToList}
+      >
+        <span className="tabBarIcon">☰</span>
+        {ROUTE_LABELS.LIST}
+      </button>
+      <button
+        type="button"
+        className={`tabBarItem ${isDetail ? "tabBarItemActive" : ""}`}
+        onClick={goToDetail}
+      >
+        <span className="tabBarIcon">▶</span>
+        {ROUTE_LABELS.DETAIL}
+      </button>
+    </nav>
+  );
+};
+```
+
+```css
+.tabBar {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 390px;
+    display: flex;
+    border-top: 1px solid #e0e0e0;
+    background: #fff;
+    z-index: 100;
+}
+
+.tabBarItem {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 0;
+    border: none;
+    background: none;
+    color: #888;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.tabBarItemActive {
+    color: #0d6efd;
+}
+
+.tabBarIcon {
+    font-size: 20px;
+    line-height: 1;
+}
+```
+
+#### modules/itunesApi.ts
+
+Добавим функцию `getTrackById` — запрос одного трека по `trackId`, если пользователь открыл «Подробнее» по прямой ссылке, а карточки ещё нет в общем списке.
+
+```ts
+export interface ITunesMusic {
+  wrapperType: string;
+  artworkUrl100: string;
+  artistName: string;
+  collectionCensoredName: string;
+  trackViewUrl: string;
+  trackId: number;
+  previewUrl?: string;
+}
+
+export interface ITunesResult {
+  resultCount: number;
+  results: ITunesMusic[];
+}
+
+export const getMusicByName = async (name = ""): Promise<ITunesResult> => {
+  return fetch(`https://itunes.apple.com/search?term=${name}`).then(
+    (response) => response.json()
+  );
+};
+
+export const getTrackById = async (
+  id: number | string
+): Promise<ITunesResult> => {
+  return fetch(`https://itunes.apple.com/lookup?id=${id}`).then(
+    (response) => response.json()
+  );
+};
+```
+
+#### components/MusicCard
+
+Вся карточка становится кликабельной: обработчик `onClick` передаётся снаружи и ведёт на страницу «Подробнее» с нужным `trackId`.
+
+```tsx
+import { FC } from "react";
+import { Card } from "react-bootstrap";
+import "./MusicCard.css";
+
+interface ICardProps {
+  artworkUrl100: string;
+  artistName: string;
+  collectionCensoredName: string;
+  onClick: () => void;
+}
+
+export const MusicCard: FC<ICardProps> = ({
+  artworkUrl100,
+  artistName,
+  collectionCensoredName,
+  onClick,
+}) => {
+  return (
+    <Card className="card" onClick={onClick}>
+      <Card.Img
+        className="cardImage"
+        variant="top"
+        src={artworkUrl100}
+        height={100}
+        width={100}
+      />
+      <Card.Body>
+        <div className="textStyle">
+          <Card.Title>{collectionCensoredName}</Card.Title>
+        </div>
+        <div className="textStyle">
+          <Card.Text>{artistName}</Card.Text>
+        </div>
+      </Card.Body>
+    </Card>
+  );
+};
+```
+
+#### ITunesPage
+
+После поиска сохраняем результаты и в локальный `music` (для отрисовки), и в общий `setCards` (для «Далее» и вкладки «Подробнее»). `trackId` из URL параметра передаём в `navigate`.
+
+```tsx
+import "./ITunesPage.css";
+import { FC, useState } from "react";
+import { Spinner } from "react-bootstrap";
+import { useNavigate, useOutletContext } from "react-router-dom";
+import { ITunesMusic, getMusicByName } from "../modules/itunesApi";
+import { InputField } from "../components/InputField";
+import { ROUTES } from "../Routes";
+import { MusicCard } from "../components/MusicCard";
+import { AppOutletContext } from "../AppLayout";
+
+const ITunesPage: FC = () => {
+  const [searchValue, setSearchValue] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [music, setMusic] = useState<ITunesMusic[]>([]);
+  const { setCards } = useOutletContext<AppOutletContext>();
+  const navigate = useNavigate();
+
+  const handleSearch = () => {
+    setLoading(true);
+    getMusicByName(searchValue)
+      .then((response) => {
+        const results = response.results.filter(
+          (item) => item.wrapperType === "track"
+        );
+        setMusic(results);
+        setCards(results);
+        setLoading(false);
+      });
+  };
+
+  const handleCardClick = (trackId: number) => {
+    navigate(`${ROUTES.DETAIL}/${trackId}`);
+  };
+
+  return (
+    <div className="container">
+      <InputField
+        value={searchValue}
+        setValue={(value) => setSearchValue(value)}
+        loading={loading}
+        onSubmit={handleSearch}
+      />
+
+      {loading && (
+        <div className="loadingBg">
+          <Spinner animation="border" />
+        </div>
+      )}
+      {!loading &&
+        (!music.length ? (
+          <div>
+            <h1>К сожалению, пока ничего не найдено :(</h1>
+          </div>
+        ) : (
+          <div className="cardsList">
+            {music.map((item) => (
+              <MusicCard
+                key={item.trackId}
+                onClick={() => handleCardClick(item.trackId)}
+                {...item}
+              />
+            ))}
+          </div>
+        ))}
+    </div>
+  );
+};
+
+export default ITunesPage;
+```
+
+#### DetailPage.tsx и DetailPage.css
+
+Параметр `:id` в адресе — это `trackId` в виде строки. Сначала ищем трек в общем списке `cards` (данные уже есть после поиска). Если не нашли — запрашиваем `getTrackById(id)`.
+
+**Воспроизведение:** при наличии `previewUrl` рендерим `<video src={previewUrl} ... />`. Иначе — `<img>` с обложкой.
+
+**Кнопка «Далее»:** в `handleNext` ищем индекс текущего трека в массиве `cards` по совпадению `trackId`. Берём элемент `cards[currentIndex + 1]` и переходим на его `trackId`. Если индекс последний или список пуст — `nextItem` будет `undefined`, переход не выполняется (кнопка нажимается, но страница не меняется).
+
+```tsx
+import "./DetailPage.css";
+import { FC, useEffect, useState } from "react";
+import { useNavigate, useOutletContext, useParams } from "react-router-dom";
+import { Button, Spinner } from "react-bootstrap";
+import { ITunesMusic, getTrackById } from "../modules/itunesApi";
+import { ROUTES } from "../Routes";
+import { AppOutletContext } from "../AppLayout";
+
+const defaultImage = "/DefaultImage.jpg";
+
+export const DetailPage: FC = () => {
+  const [pageData, setPageData] = useState<ITunesMusic>();
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { cards } = useOutletContext<AppOutletContext>();
+
+  useEffect(() => {
+    if (!id) return;
+
+    const fromList = cards.find((item) => String(item.trackId) === id);
+    if (fromList) {
+      setPageData(fromList);
+      return;
+    }
+
+    getTrackById(id).then((response) => {
+      setPageData(response.results[0]);
+    });
+  }, [id, cards]);
+
+  const handleNext = () => {
+    if (!id || !cards.length) return;
+    const currentIndex = cards.findIndex(
+      (item) => String(item.trackId) === id
+    );
+    const nextItem = cards[currentIndex + 1];
+    if (nextItem) {
+      navigate(`${ROUTES.DETAIL}/${nextItem.trackId}`);
+    }
+  };
+
+  if (!pageData) {
+    return (
+      <div className="detailLoader">
+        <Spinner animation="border" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="detailPage">
+      {pageData.previewUrl ? (
+        <video
+          className="detailVideo"
+          src={pageData.previewUrl}
+          autoPlay
+          loop
+          muted
+          playsInline
+        />
+      ) : (
+        <img
+          className="detailVideo"
+          src={pageData.artworkUrl100 || defaultImage}
+          alt={pageData.collectionCensoredName}
+        />
+      )}
+      <div className="detailOverlay">
+        <div className="detailTitle">{pageData.collectionCensoredName}</div>
+        <div className="detailArtist">{pageData.artistName}</div>
+        <Button className="detailNextBtn" variant="light" onClick={handleNext}>
+          Далее
+        </Button>
+      </div>
+    </div>
+  );
+};
+```
+
+```css
+.detailPage {
+    position: relative;
+    height: calc(100vh - 64px);
+    overflow: hidden;
+    background: #000;
+}
+
+.detailVideo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.detailOverlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 24px 16px 80px;
+    color: #fff;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.75));
+}
+
+.detailTitle {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.detailArtist {
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+.detailNextBtn {
+    margin-top: 16px;
+    width: 100%;
+}
+
+.detailLoader {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: calc(100vh - 64px);
+}
+```
+
+#### App.tsx
+
+Вложенные маршруты: общий `AppLayout` оборачивает список и страницу «Подробнее». Параметр `:id` в пути — `trackId` трека.
+
+```tsx
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { DetailPage } from "./pages/DetailPage";
+import ITunesPage from "./pages/ITunesPage";
+import { ROUTES } from "./Routes";
+import { AppLayout } from "./AppLayout";
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route element={<AppLayout />}>
+          <Route path={ROUTES.LIST} element={<ITunesPage />} />
+          <Route path={`${ROUTES.DETAIL}/:id`} element={<DetailPage />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+export default App;
+```
+
+![Gif 4](./assets/4.gif)
+
+## 7. Доработка React приложения по варианту
+
+### 7.1. Реализовать получение данных из mock-объектов
+
+По заданию лабораторной на этом этапе данные для карточек берутся **только из mock-объектов** (без вашего бэкенда). Запросы к iTunes остаются в коде как пример работы с API; при ошибке сети, пустом ответе или для демонстрации без интернета подставляем данные из `mock.ts`.
+
+В mock у каждой записи должен быть **`trackId`** — по нему строятся ссылки `/detail/1`, `/detail/2` и работает кнопка «Далее». Поле **`previewUrl`** в mock можно оставить пустым: тогда на странице «Подробнее» вместо видео покажется обложка или дефолтное изображение (см. п. 7.2).
+
+#### modules/mock.ts
+
+```ts
+import { ITunesResult } from "./itunesApi";
+
+export const SONGS_MOCK: ITunesResult = {
+  resultCount: 3,
+  results: [
+    {
+      wrapperType: "track",
+      artistName: "Pink Floyd",
+      collectionCensoredName: "The Wall",
+      trackViewUrl: "",
+      artworkUrl100: "",
+      trackId: 1,
+      previewUrl: "",
+    },
+    {
+      wrapperType: "track",
+      artistName: "Queen",
+      collectionCensoredName: "A Night At The Opera",
+      trackViewUrl: "",
+      artworkUrl100: "",
+      trackId: 2,
+      previewUrl: "",
+    },
+    {
+      wrapperType: "track",
+      artistName: "AC/DC",
+      collectionCensoredName: "Made in Heaven",
+      trackViewUrl: "",
+      artworkUrl100: "",
+      trackId: 3,
+      previewUrl: "",
+    },
+  ],
+};
+```
+
+#### ITunesPage
+
+При первом открытии приложения кладём mock в список и в общий `cards` — иначе вкладка «Подробнее» и «Далее» не будут знать, какие карточки показывать. При поиске сначала пробуем iTunes; если результатов нет или запрос упал — фильтруем mock по началу названия альбома и снова обновляем `setCards`, чтобы порядок «Далее» совпадал с отображаемым списком.
+
+```tsx
+import "./ITunesPage.css";
+import { FC, useEffect, useState } from "react";
+import { Spinner } from "react-bootstrap";
+import { useNavigate, useOutletContext } from "react-router-dom";
+import { getMusicByName } from "../modules/itunesApi";
+import { InputField } from "../components/InputField";
+import { ROUTES } from "../Routes";
+import { MusicCard } from "../components/MusicCard";
+import { AppOutletContext } from "../AppLayout";
+import { SONGS_MOCK } from "../modules/mock";
+
+const ITunesPage: FC = () => {
+  const [searchValue, setSearchValue] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [music, setMusic] = useState(SONGS_MOCK.results);
+  const { setCards } = useOutletContext<AppOutletContext>();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    setCards(SONGS_MOCK.results);
+  }, [setCards]);
+
+  const applyMock = () => {
+    const results = SONGS_MOCK.results.filter((item) =>
+      item.collectionCensoredName
+        .toLowerCase()
+        .startsWith(searchValue.toLowerCase())
+    );
+    const list = results.length ? results : SONGS_MOCK.results;
+    setMusic(list);
+    setCards(list);
+    setLoading(false);
+  };
+
+  const handleSearch = () => {
+    setLoading(true);
+    getMusicByName(searchValue)
+      .then((response) => {
+        const results = response.results.filter(
+          (item) => item.wrapperType === "track"
+        );
+        if (results.length) {
+          setMusic(results);
+          setCards(results);
+          setLoading(false);
+          return;
+        }
+        applyMock();
+      })
+      .catch(applyMock);
+  };
+
+  const handleCardClick = (trackId: number) => {
+    navigate(`${ROUTES.DETAIL}/${trackId}`);
+  };
+
+  // разметка как в п. 6.3
+};
+
+export default ITunesPage;
+```
+
+#### DetailPage
+
+Если трека нет в общем списке и `getTrackById` не вернул данные, ищем запись в mock по `trackId` из адреса — чтобы страница «Подробнее» открывалась и офлайн.
+
+```tsx
+// фрагмент useEffect в DetailPage.tsx
+getTrackById(id)
+  .then((response) => {
+    const data = response.results[0];
+    setPageData(
+      data ??
+        SONGS_MOCK.results.find((track) => String(track.trackId) === id)
+    );
+  })
+  .catch(() =>
+    setPageData(
+      SONGS_MOCK.results.find((track) => String(track.trackId) === id)
+    )
+  );
+```
+
+### 7.2. Добавим дефолтное изображение
+
+У многих mock-записей и части ответов API нет обложки (`artworkUrl100` пустой). Положите файл **`DefaultImage.jpg`** в папку `public/` — он будет доступен по пути `/DefaultImage.jpg`.
+
+В **списке** подставляем дефолт в `MusicCard`, если обложка отсутствует. На **странице «Подробнее»** дефолт используется в ветке без `previewUrl` (когда показываем `<img>` вместо `<video>`).
+
+```tsx
+// MusicCard.tsx
+const defaultImage = "/DefaultImage.jpg";
+
+<Card.Img
+  className="cardImage"
+  variant="top"
+  src={artworkUrl100 || defaultImage}
+  height={100}
+  width={100}
+/>
+```
+
+```tsx
+// DetailPage.tsx — fallback, когда нет previewUrl
+<img
+  className="detailVideo"
+  src={pageData.artworkUrl100 || defaultImage}
+  alt={pageData.collectionCensoredName}
+/>
+```
+
+Теперь, если изображение не пришло из API или mock, отрисуется заглушка и в списке, и на экране «Подробнее».
+
+![Gif 5](./assets/5.gif)
+
+### 7.3. Нижняя таб-панель навигации
+
+Главное меню приложения в этой лабораторной — **нижняя таб-панель** (`TabBar`), а не верхний `Navbar`. Она уже реализована в п. 6.3; при защите работы кратко повторите её поведение:
+
+- две вкладки: **Список** и **Подробнее**;
+- **Список** всегда ведёт на `/` с полем поиска и карточками;
+- **Подробнее** открывает первую карточку из текущего массива `cards` (после поиска или mock);
+- активная вкладка подсвечивается по текущему URL;
+- панель закреплена внизу узкой колонки 390px и не прокручивается вместе с контентом.
+
+При выполнении задания по **вашей теме** замените подписи и иконки на свои, но сохраните два экрана и ту же логику переходов.
+
+### 7.4. Подключение к собственному API из web-сервиса
+
+Вернемся к нашему примеру с iTunes. Теперь нам требуется заменить наши запросы `fetch` к сервису iTunes на обращение к нашему сервису `Django` или `Golang`.
+
+## 8. Важный момент. CORS  
+
+У вас возникнет проблема с отображением проекта React с частью, связанной с json'ом, при подключении приложения к вашему веб-сервису.
+
+Как понять, что пустой экран связан с этой ошибкой?
+
+Нажимаем правой кнопкой мыши на любое место на странице, после чего нажимаем на кнопку **Посмотреть код**. После чего переходим во вкладку **Console**, где и ищем ошибку связанную с `CORS`-политикой. Если она есть, то просто отключаем CORS.
+
+Мы предлагаем 3 способа решения этой проблемы.
+
+### CORS. Проксирование на фронтенде
+
+Мы можем проксировать запросы через наш dev сервер. Схема проксирования такая: фронт -> прокси -> бек. В таком случае у нас не будет проблем с `CORS` запросами.
+
+Для настройки необходимо в файле `vite.config.ts` указать поле [proxy][vite-proxy]. К примеру, если мы будем делать запрос на `/api/someroute`, то наш dev сервер будет проксировать его на `http://localhost:8080/someroute`.
+
+```ts
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      "/api": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, "/"),
+      },
+    },
+  },
+});
+```
+
+### CORS. Настройка на бекенде
+
+Необходимо на бекенде настроить отдачу `CORS` заголовков. Как это сделать можно почитать [тут][habr-cors1] или [тут][habr-cors2].
+
+### CORS. Отключение на фронтенде
+
+С помощью специальных расширений мы можем отключить работу `CORS` политик на фронтенде. К пример, вот полезное расширение для [Google Chrome][chrome-cors-unblock]. Но расширение браузера не лучшее решение данной проблемы, это небезопасно при использовании в сторонних сайтах. Поэтому его можно использовать только для отладки на этапе разработки, но не для конечного решения.
+
+## 9. Развертывание фронтенда через Docker
+
+В этом разделе мы рассмотрим, как развернуть фронтенд-приложение с использованием Docker. Это позволит запускать приложение в изолированной среде, что упрощает развертывание и обеспечивает одинаковое поведение на разных машинах.
+
+### 9.1. Настройка сервера в `vite.config.ts`
+
+Внесем некоторые изменения в `vite.config.ts`
+```ts
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      "/api": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, "/"),
+      },
+    },
+    watch: { // нужно для hot-reload при использовании docker
+        usePolling: true,
+    }, 
+    host: true, // нужно, чтобы правильно работал маппинг портов в docker-контейнере
+    strictPort: true, // необязательно
+    port: 3000, // можете заменить на любой другой порт
+  },
+});
+```
+Опция `watch` с `usePolling: true` указывает Vite не ждать уведомлений от операционной системы об изменениях файлов, а вручную проверять (опрашивать) файлы на изменения. Если кратко - чтобы работал hot-reload при использовании docker.
+
+Опция `host` установлена в значение true, что необходимо для корректной работы сопоставления портов Docker-контейнера.
+
+Опция `strictPort` установлена в значение true, что означает, что приложение будет прослушивать только указанный порт и не будет переходить на другой порт, если указанный порт недоступен.
+
+Опция `port` указывает, что приложение должно прослушивать порт 3000, который можно заменить на любой другой номер порта при необходимости.
+
+### 9.2. Настройка `Dockerfile` и `.dockerignore`
+Dockerfile — это набор инструкций, определяющих, как создать образ Docker со всеми необходимыми компонентами для запуска приложения.
+
+Добавим Dockerfile в корневую директорию проекта с следующим содержимым:
+```dockerfile
+FROM node AS development
+
+WORKDIR /app
+
+COPY package*.json .
+
+RUN npm install
+
+COPY . .  
+```
+Поскольку в Dockerfile есть кэш для уже выполненных команд, важно ставить `COPY package*.json .` перед `RUN npm install`, чтобы `npm install` не выполнялась каждый раз при обновлении проекта и копировании в WORKDIR.
+
+`FROM node as development` означает, что мы используем образ Node.js в качестве базового и называем его development. Последующие команды на этом этапе создадут образ, подходящий для разработки.
+
+Команда `WORKDIR /app` устанавливает рабочий каталог для последующих команд равным `/app`.
+
+Команда `COPY package*.json .` копирует файлы `package.json` и `package-lock.json` в рабочий каталог образа Docker.
+
+Команда `RUN npm install` устанавливает зависимости, указанные в `package.json` файле.
+
+Команда `COPY . .` копирует всю кодовую базу приложения в рабочий каталог образа Docker.
+
+Создадим файл `.dockerignore` для исключения ненужных файлов из контекста сборки:
+```.dockerignore
+node_modules
+
+dist
+build
+.cache
+
+.git
+.gitignore
+.vscode
+.idea
+
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+README.md
+```
+
+### 9.3. Создание `docker-compose.yml`
+
+Cоздадим файл `docker-compose.yml`в корневой директори (там же, где `Dockerfile` и `.dockerignore`)
+```yaml
+services:
+   app:
+      container_name: my-react-app
+      build:
+         context: .
+         target: development
+      volumes:
+         - .:/app
+         - /app/node_modules
+      ports:
+         - 3000:3000
+      command: npm run dev
+```
+Для чего он нужен?
+
+`docker-compose.yml` Это файл конфигурации, который упрощает процесс определения и запуска многоконтейнерных приложений Docker. Он позволяет в одном файле определить сервисы, сети и тома, необходимые для вашего приложения, а также их взаимосвязи и конфигурации. Это упрощает управление сложными многоконтейнерными приложениями и их развёртывание с помощью одной команды с использованием `docker-compose`.
+
+В файле `docker-compose.yml` определена конфигурация для сервиса app, который представляет собой отдельный контейнер в составе вашего приложения:
+
+- Сервис `app` определяет контейнер, который будет создан и настроен с использованием указанных параметров.
+
+- В разделе `container_name` можно явно указать, как вы хотите назвать контейнер
+
+- В разделе `build` указано, что образ Docker для службы должен быть создан с использованием Dockerfile в текущем каталоге (`context: .`) и что следует использовать этап development (`target: development`).
+
+- В разделе `volumes` указываются два тома, которые будут смонтированы для службы: текущий каталог (`.`) в `/app` внутри контейнера и каталог `node_modules` внутри контейнера, чтобы предотвратить его перезапись смонтированным томом.
+
+- В разделе `ports` указано, что порт `3000` на хост-компьютере должен быть сопоставлен с портом `3000` внутри контейнера, где выполняется команда `npm run dev`.
+
+- В разделе command указана команда `npm run dev`, которая будет выполнена при запуске контейнера для запуска приложения в режиме разработки.
+
+### 9.5. Запуск
+
+Запустим команду в терминале
+```bash
+docker-compose up --build
+```
+Команда `docker-compose up --build` собирает и запускает контейнеры для сервисов, определенных в `docker-compose.yml`, применяя все изменения и выводя логи в терминал.
+
+При успешной сборке в терминале вы увидите
+
+![Фото docker](./assets/docker_build.png)
+
+Теперь ваше приложение доступно по адресу http://localhost:3000/
+
+Если в файлы, связанные с Docker (т.е. в файлы, которые мы копируем при сборке образа), не вносились изменения, вам не нужно перестраивать образ, вы можете просто использовать следующее:
+```bash
+docker-compose up
+```
+
+**Обратите внимание, что если вы измените исходный код в режиме разработки, это отразится на веб-странице.**
+
+## 10. Полезные ссылки
+
+* [React]
+* [React Router][react-router]
+* [Typescript]
+* [Vite]
+* [Dockerfile]
+* [Docker Compose][docker-compose]
+
+[iu5-javascript]: https://github.com/iu5git/JavaScript
+[react]: https://react.dev
+[react-hooks]: https://react.dev/reference/react
+[react-router]: https://reactrouter.com
+[vite]: https://vitejs.dev
+[vite-proxy]: https://vitejs.dev/config/server-options.html#server-proxy
+[vite-template-project]: https://vitejs.dev/guide/#scaffolding-your-first-vite-project
+[typescript]: https://www.typescriptlang.org/
+[habr-react-diff-class-function-component]: https://habr.com/ru/company/ruvds/blog/444348
+[habr-react-hooks]: https://habr.com/ru/company/ruvds/blog/554280
+[habr-react-jsx]: https://habr.com/ru/articles/319270
+[habr-typescript]: https://habr.com/ru/articles/663964
+[habr-cors1]: https://habr.com/ru/companies/macloud/articles/553826
+[habr-cors2]: https://habr.com/ru/articles/514684
+[chrome-cors-unblock]: https://chrome.google.com/webstore/detail/cors-unblock/lfhmikememgdcahcdlaciloancbhjino
+[dockerfile]: https://docs.docker.com/reference/dockerfile/
+[docker-compose]: https://docs.docker.com/compose/intro/compose-application-model/

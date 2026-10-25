@@ -1,0 +1,24 @@
+.filterBox {
+  padding: 10px 16px;
+  background: #fafafa;
+  border-bottom: 1px solid #eee;
+  flex-shrink: 0;
+}
+
+.filterLabel {
+  font-size: 0.85rem;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.filterForm {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.filterButton {
+  background: var(--primary);
+  border: none;
+  font-weight: bold;
+}

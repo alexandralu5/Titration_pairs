@@ -1,0 +1,605 @@
+{
+  "info": {
+    "name": "Titration Pairs — REST API (веб-сервис /api/titration_pairs)",
+    "description": "Коллекция для скриншотов лабораторной №4 (авторизация).\n\nЗапросы идут в порядке показа: вход → список услуг с сессией и без → создание услуги → черновик → публикация гостем (401) и с сессией (200) → лента → лайк → удаление → регистрация → выход → старая кука (401).\n\nАвторизация сессионная: после запроса 1 Postman хранит куку sessionId и подставляет её сам. В запросах с пометкой «гость» отправка кук отключена.\n\nURL-дизайн: услуги лежат прямо под /api/titration_pairs, пользователи — под /users; действие задаёт HTTP-метод; идентификатор объекта идёт в пути (:id); фильтры и условия выборки — в строке запроса.\n\nПеременные коллекции:\n  baseUrl   = http://localhost:3000/api/titration_pairs\n  serviceId = id созданной услуги (заполняется автоматически)\n  feedId    = id первой записи ленты (заполняется автоматически из GET /feed)\n  sessionId = значение куки сессии (заполняется автоматически после входа)\n  newUser   = логин для регистрации (генерируется автоматически)\n  imagePath, videoPath = пути к файлам для загрузки",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/titration_pairs"
+    },
+    {
+      "key": "serviceId",
+      "value": "18"
+    },
+    {
+      "key": "feedId",
+      "value": "1"
+    },
+    {
+      "key": "imagePath",
+      "value": "T:/home/alexandralu/Titration_pairs/titration_pairs_authorization/public/img/default-image.jpg"
+    },
+    {
+      "key": "videoPath",
+      "value": "T:/home/alexandralu/Titration_pairs/titration_pairs_authorization/public/img/default-video.mp4"
+    },
+    {
+      "key": "sessionId",
+      "value": ""
+    },
+    {
+      "key": "newUser",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Аутентификация (login)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/users/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "users",
+            "login"
+          ]
+        },
+        "description": "POST /api/titration_pairs/users/login — проверка логина и пароля. Сервер создаёт сессию в Redis и отвечает заголовком Set-Cookie: sessionId=...; HttpOnly. Postman сохраняет куку и сам подставляет её в следующие запросы. Вместо этого можно взять куку из браузера (DevTools → Application → Cookies) и передать заголовком Cookie: sessionId=<значение>.",
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"username\": \"admin\", \"password\": \"admin123\" }"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Пользователь без пароля в ответе', function () { var u = pm.response.json(); pm.expect(Object.keys(u).sort().join(',')).to.eql('created_at,id,role,username'); pm.expect(u.username).to.eql('admin'); });",
+              "pm.test('Сервер поставил куку sessionId', function () { pm.expect(pm.cookies.has('sessionId')).to.eql(true); pm.collectionVariables.set('sessionId', pm.cookies.get('sessionId')); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Список услуг с фильтром (с сессией)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}?minConcentration=0.1",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "query": [
+            {
+              "key": "minConcentration",
+              "value": "0.1"
+            }
+          ]
+        },
+        "description": "GET /api/titration_pairs — только опубликованные записи; фильтрация на бэкенде по минимальной концентрации. Фильтр передаётся в строке запроса. is_mine считается по сессии: 1 — услугу создал вошедший пользователь."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Базовые поля + is_mine, status нет', function () { var keys = 'concentration,created_at,description,formed_at,id,image_url,is_mine,likes_count,ph,title,video_url'; pm.response.json().forEach(function (s) { pm.expect(Object.keys(s).sort().join(',')).to.eql(keys); }); });",
+              "pm.test('is_mine — признак 0/1 «моя услуга»', function () { pm.response.json().forEach(function (s) { pm.expect(s.is_mine).to.be.oneOf([0, 1]); }); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Список услуг без авторизации (гость)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}",
+          "host": [
+            "{{baseUrl}}"
+          ]
+        },
+        "description": "GET /api/titration_pairs — чтение доступно без авторизации: запрос уходит без куки и получает 200. Для гостя is_mine у всех записей равен 0."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200 без куки', function () { pm.response.to.have.status(200); });",
+              "pm.test('Для гостя is_mine всегда 0', function () { pm.response.json().forEach(function (s) { pm.expect(s.is_mine).to.eql(0); }); });"
+            ]
+          }
+        }
+      ],
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      }
+    },
+    {
+      "name": "4. Добавить новую услугу (с картинкой и видео)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "title",
+              "value": "Титрование KOH + HCl (Postman)",
+              "type": "text"
+            },
+            {
+              "key": "image",
+              "type": "file",
+              "src": "{{imagePath}}"
+            },
+            {
+              "key": "video",
+              "type": "file",
+              "src": "{{videoPath}}"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}",
+          "host": [
+            "{{baseUrl}}"
+          ]
+        },
+        "description": "POST /api/titration_pairs — создание черновика, нужна сессия. Создатель заполняется автоматически пользователем из сессии. Файлы загружаются в Minio латинскими именами, в БД сохраняются имена файлов. Системные поля (id, status, creator, moderator, даты) с клиента не принимаются."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 201', function () { pm.response.to.have.status(201); });",
+              "pm.test('Черновик с Minio-URL', function () {",
+              "  var s = pm.response.json();",
+              "  pm.test('Базовый набор полей: без is_liked, is_mine и status', function () { pm.expect(Object.keys(s).sort().join(',')).to.eql('concentration,created_at,description,formed_at,id,image_url,likes_count,ph,title,video_url'); });",
+              "  pm.expect(s.image_url).to.match(/^http:\\/\\/localhost:9000\\/titration\\//);",
+              "  pm.test('id сохранён в переменную сервиса', function () { pm.expect(s.id).is.not.undefined; pm.collectionVariables.set('serviceId', String(s.id)); });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "4b. Заменить изображение услуги (MinIO)",
+      "request": {
+        "method": "PUT",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "image",
+              "type": "file",
+              "src": "{{imagePath}}"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/{{serviceId}}/image",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "{{serviceId}}",
+            "image"
+          ]
+        },
+        "description": "PUT /api/titration_pairs/:id/image — замена изображения услуги, нужна сессия создателя или модератора. Метод PUT, потому что операция идемпотентная: повторный вызов заменяет ресурс, а не создаёт новый. Старое изображение удаляется из MinIO, новое сохраняется латинским именем."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Новое изображение с латинским именем в MinIO', function () {",
+              "  pm.expect(pm.response.json().image_url).to.match(/^http:\\/\\/localhost:9000\\/titration\\/img_[a-z0-9_]+\\.(jpe?g|png|gif|webp)$/);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Получить поля черновика",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/draft",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "draft"
+          ]
+        },
+        "description": "GET /api/titration_pairs/draft — черновик пользователя сессии (не более 1 записи), id не указывается. Без сессии — 401, при 404 — черновика нет."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+              "var s = pm.response.json();",
+              "pm.test('Базовый набор полей: без is_liked, is_mine и status', function () { pm.expect(Object.keys(s).sort().join(',')).to.eql('concentration,created_at,description,formed_at,id,image_url,likes_count,ph,title,video_url'); });",
+              "pm.collectionVariables.set('serviceId', String(s.id));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Публикация без авторизации (гость) → 401",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/{{serviceId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "{{serviceId}}"
+          ]
+        },
+        "description": "PUT /api/titration_pairs/:id без куки — метод создателя закрыт: 401 и пустое тело {}. Услуга остаётся черновиком.",
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"ph\": 7.0, \"concentration\": 0.12, \"description\": \"Точка эквивалентности при pH 7.0.\" }"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 401 без сессии', function () { pm.response.to.have.status(401); });",
+              "pm.test('Тело ошибки пустое', function () { pm.expect(pm.response.json()).to.eql({}); });"
+            ]
+          }
+        }
+      ],
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      }
+    },
+    {
+      "name": "7. Публикация услуги (с сессией)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"ph\": 7.0, \"concentration\": 0.12, \"description\": \"Точка эквивалентности при pH 7.0.\" }"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/{{serviceId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "{{serviceId}}"
+          ]
+        },
+        "description": "PUT /api/titration_pairs/:id — обновление услуги, в нашем домене оно же публикует черновик (draft → published). Глагола publish в URL нет: действие задаёт метод PUT, id идёт в пути. Только создатель или модератор и только из черновика (вернуться в черновик нельзя). Дата формирования проставляется на бэкенде."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+              "var s = pm.response.json();",
+              "pm.test('Базовый набор полей: без is_liked, is_mine и status', function () { pm.expect(Object.keys(s).sort().join(',')).to.eql('concentration,created_at,description,formed_at,id,image_url,likes_count,ph,title,video_url'); });",
+              "pm.expect(s.ph).to.eql(7.0);",
+              "pm.test('Поля обновлены, дата публикации заполнена', function () { pm.expect(s.concentration).to.eql(0.12); pm.expect(s.formed_at).to.not.eql(null); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Получить ленту (без ид)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/feed",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "feed"
+          ]
+        },
+        "description": "GET /api/titration_pairs/feed — лента без ид: одна запись (объект, а не массив) — первая опубликованная. is_liked — лайкнул ли её пользователь сессии (у гостя 0)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+              "var s = pm.response.json();",
+              "pm.collectionVariables.set('feedId', String(s.id));",
+              "pm.test('В ленте одна запись, а не массив', function () { pm.expect(s).to.be.an('object'); pm.expect(Array.isArray(s)).to.eql(false); });",
+              "pm.test('Базовые поля + is_liked, status нет', function () { pm.expect(Object.keys(s).sort().join(',')).to.eql('concentration,created_at,description,formed_at,id,image_url,is_liked,likes_count,ph,title,video_url'); });",
+              "pm.test('is_liked — признак 0/1 «я лайкнул»', function () { pm.expect(s.is_liked).to.be.oneOf([0, 1]); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Получить ленту по ид (?next=true)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/feed/{{feedId}}?next=true",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "feed",
+            "{{feedId}}"
+          ],
+          "query": [
+            {
+              "key": "next",
+              "value": "true"
+            }
+          ]
+        },
+        "description": "GET /api/titration_pairs/feed/:id?next=true — возвращает следующую за :id запись ленты. Без ?next= возвращается сама запись :id. В ответе одна запись с признаком is_liked."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('В записи ленты есть is_liked (0/1) и нет is_mine', function () { var s = pm.response.json(); pm.expect(s.is_liked).to.be.oneOf([0, 1]); pm.expect(s).to.not.have.property('is_mine'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Поставить лайк",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"value\": 1 }"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/{{serviceId}}/like",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "{{serviceId}}",
+            "like"
+          ]
+        },
+        "description": "POST /api/titration_pairs/:id/like — нужна сессия: value=1 ставит лайк от пользователя сессии, value=0 отменяет."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 201', function () { pm.response.to.have.status(201); });",
+              "var r = pm.response.json();",
+              "pm.expect(r.liked).to.eql(true);",
+              "pm.expect(r.likes_count).to.be.gte(1);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11. Удалить услугу (soft delete)",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/{{serviceId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "{{serviceId}}"
+          ]
+        },
+        "description": "DELETE /api/titration_pairs/:id — мягкое удаление, нужна сессия создателя или модератора: в БД status = 'deleted', запись клиенту больше не возвращается. Ответ: {\"id\": 1}."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('В ответе только id, status не отдаётся', function () { var b = pm.response.json(); pm.expect(Object.keys(b).join(',')).to.eql('id'); pm.expect(String(b.id)).to.eql(pm.collectionVariables.get('serviceId')); });",
+              "pm.test('Удалённой записи нет в списке', function () {",
+              "  pm.sendRequest('http://localhost:3000/api/titration_pairs', function (e, r) {",
+              "    var ids = r.json().map(function (s) { return String(s.id); });",
+              "    pm.expect(ids).to.not.include(pm.collectionVariables.get('serviceId'));",
+              "  });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12. Зарегистрировать пользователя",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/users",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "users"
+          ]
+        },
+        "description": "POST /api/titration_pairs/users — регистрация нового пользователя (домен «Пользователь»). Глагола register в URL нет: создание ресурса задаёт метод POST. Роль всегда user, пароль сохраняется хешем и в ответ не попадает. Логин генерируется перед запросом, чтобы повторный запуск не давал 409.",
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"username\": \"{{newUser}}\", \"password\": \"secret123\" }"
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set('newUser', 'user_' + Date.now());"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 201', function () { pm.response.to.have.status(201); });",
+              "pm.test('Роль user, пароля в ответе нет', function () { var u = pm.response.json(); pm.expect(u.username).to.eql(pm.collectionVariables.get('newUser')); pm.expect(u.role).to.eql('user'); pm.expect(u).to.not.have.property('password'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13. Деавторизация (logout)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/users/logout",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "users",
+            "logout"
+          ]
+        },
+        "description": "POST /api/titration_pairs/users/logout — сессия удаляется из Redis, кука очищается. Метод POST, как и у аутентификации."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('В ответе id вышедшего пользователя', function () { pm.expect(Object.keys(pm.response.json()).join(',')).to.eql('id'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14. Запрос со старой кукой после выхода → 401",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Cookie",
+            "value": "sessionId={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/draft",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "draft"
+          ]
+        },
+        "description": "GET /api/titration_pairs/draft с кукой, сохранённой при входе: сессии в Redis уже нет, поэтому 401 — выход действует сразу."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 401: сессия удалена', function () { pm.response.to.have.status(401); });"
+            ]
+          }
+        }
+      ],
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      }
+    }
+  ]
+}

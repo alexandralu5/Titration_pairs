@@ -1,0 +1,69 @@
+.gridCard {
+  height: 210px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+}
+
+.cardMedia {
+  position: relative;
+  height: 110px;
+  background: #eee;
+  flex-shrink: 0;
+}
+
+.cardMedia img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0;
+}
+
+.phTag {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-size: 0.7rem;
+}
+
+.gridCardBody {
+  position: relative;
+  padding: 6px 8px;
+}
+
+.gridCardTitle {
+  margin: 0 0 2px 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.15;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.concText {
+  font-size: 0.72rem;
+  color: #666;
+  margin: 0;
+}
+
+.likesCount {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  height: 26px;
+  min-width: 68px;
+  padding: 0 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffe6e6;
+  color: #e60000;
+  border: 1px solid #fecaca;
+}
