@@ -592,6 +592,20 @@ docker exec -it redis redis-cli
 
 После `POST /users/logout` ключ исчезает из `KEYS session:*`, а запрос со старой кукой получает `401`.
 
+Нагляднее — одной командой: Lua-скрипт `scripts/redis-sessions.lua` выполняется внутри Redis и выводит все сессии с пользователем и оставшимся временем:
+
+```bash
+docker exec -i redis redis-cli --raw EVAL "$(cat scripts/redis-sessions.lua)" 0
+```
+
+```text
+Активных сессий: 1
+
+1) session:5fb92c70-cf55-44fd-a862-400f9803e53f
+   пользователь: admin (id 1, роль moderator)
+   осталось: 3600 с
+```
+
 7. **Lua-скрипт.** Трижды выполнить `POST /users/login` с неверным паролем, затем в консоли Redis `GET login_attempts:admin` — `"3"`, `TTL login_attempts:admin` — оставшиеся секунды блокировки. После пятой неудачной попытки вход отвечает `429`. Подробнее — в разделе «Lua-скрипт в Redis».
 
 ## Диаграмма последовательности
